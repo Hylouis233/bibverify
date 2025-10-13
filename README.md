@@ -1,10 +1,10 @@
 # Bibverify - BibTeX 文献检查工具
 
 <p align="center">
-[![English](https://img.shields.io/badge/English-README-blue.svg)](README_EN.md) | [![中文](https://img.shields.io/badge/中文-README-red.svg)](README.md)
+<a href="README_EN.md"><img src="https://img.shields.io/badge/English-README-blue.svg" alt="English README"></a> | <a href="README.md"><img src="https://img.shields.io/badge/中文-README-red.svg" alt="中文 README"></a>
 </p>
 
-> 🔍 **English**: A multi-platform BibTeX reference verification and update tool that automatically checks and improves reference information through multiple academic database APIs.  
+> 🔍 **English**: A multi平台 BibTeX reference verification and update tool that automatically checks and improves reference information through multiple academic database APIs.  
 > 📚 **中文**: 一个支持多平台的 BibTeX 文献验证和更新工具，通过多个学术数据库 API 自动检查和完善文献信息。
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE) [![Python](https://img.shields.io/badge/python-3.7+-green.svg)](https://www.python.org/) [![Stars](https://img.shields.io/github/stars/Hylouis233/bibverify?style=social)](https://github.com/Hylouis233/bibverify)

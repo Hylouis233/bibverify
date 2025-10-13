@@ -1,7 +1,7 @@
 # Bibverify - BibTeX Reference Verification Tool
 
 <p align="center">
-[![English](https://img.shields.io/badge/English-README-blue.svg)](README_EN.md) | [![中文](https://img.shields.io/badge/中文-README-red.svg)](README.md)
+<a href="README_EN.md"><img src="https://img.shields.io/badge/English-README-blue.svg" alt="English README"></a> | <a href="README.md"><img src="https://img.shields.io/badge/中文-README-red.svg" alt="中文 README"></a>
 </p>
 
 > 🔍 **English**: A multi-platform BibTeX reference verification and update tool that automatically checks and improves reference information through multiple academic database APIs.  

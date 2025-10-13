@@ -5,7 +5,7 @@ __pycache__/
 config.json
 *.bib
 *.txt
-
+*.zip
 # C extensions
 *.so
 
