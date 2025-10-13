@@ -1,0 +1,138 @@
+{
+  "notice": "Bibverify - BibTeX文献检查工具 - 配置文件模板 / Configuration Template",
+  "instructions": "1. 复制此文件为 config.json / Copy this file as config.json; 2. 填写您的信息 / Fill in your information; 3. 根据需要启用/禁用平台 / Enable/disable platforms as needed",
+  "polite_pool_notice": "建议先添加 polite mail，以获取更高的访问速度 / Recommended to add polite mail first for higher access speed",
+  
+  "language": "CN",
+  "language_options": {
+    "CN": "中文 / Chinese",
+    "EN": "English"
+  },
+  
+  "bib_file": "references.bib",
+  
+  "user_info": {
+    "email": "your_email@example.com",
+    "app_name": "Bibverify",
+    "_note": "邮箱用于访问 Polite Pool，提高 CrossRef/OpenAlex/Unpaywall 的速率限制 / Email is used to access Polite Pool, improving rate limits for CrossRef/OpenAlex/Unpaywall"
+  },
+  
+  "platforms": {
+    "crossref": {
+      "enabled": true,
+      "priority": 1,
+      "requires_api_key": false,
+      "use_polite_pool": true,
+      "description": "综合学术文献数据库（期刊、会议论文等） / Comprehensive academic literature database (journals, conference papers, etc.)",
+      "coverage": "全学科 / All disciplines",
+      "rate_limit_notes": "使用 Polite Pool 以获得更高访问速度 / Use Polite Pool for higher access speed"
+    },
+    
+    "openalex": {
+      "enabled": true,
+      "priority": 2,
+      "requires_api_key": false,
+      "use_polite_pool": true,
+      "description": "开放学术图谱数据库 / Open academic knowledge graph",
+      "coverage": "全学科，含引用、机构、作者关系 / All disciplines with citations, institutions, and authors",
+      "rate_limit_notes": "有邮箱: 突发请求更高; 100k/day / With email: higher burst limit; 100k/day"
+    },
+    
+    "semantic_scholar": {
+      "enabled": true,
+      "priority": 3,
+      "requires_api_key": true,
+      "api_key": "",
+      "description": "AI 驱动的学术搜索引擎（Allen Institute for AI） / AI-powered academic search engine (Allen Institute for AI)",
+      "coverage": "全学科，含引用关系 / All disciplines with citation data",
+      "rate_limit_notes": "有 API key: 100 req/s; 无 key: 100 req/5min / With API key: 100 req/s; Without: 100 req/5min",
+      "register_url": "https://www.semanticscholar.org/product/api#api-key-form"
+    },
+    
+    "pubmed": {
+      "enabled": true,
+      "priority": 4,
+      "requires_api_key": false,
+      "api_key": "",
+      "description": "美国国家医学图书馆生物医学文献数据库 / U.S. National Library of Medicine biomedical database",
+      "coverage": "生物医学、生命科学 / Biomedicine and Life Sciences",
+      "rate_limit_notes": "无 key: 3 req/s; 有 key: 10 req/s / Without key: 3 req/s; With key: 10 req/s",
+      "register_url": "https://www.ncbi.nlm.nih.gov/account/"
+    },
+    
+    "europe_pmc": {
+      "enabled": true,
+      "priority": 5,
+      "requires_api_key": false,
+      "description": "欧洲生物医学文献数据库 / Europe PubMed Central biomedical database",
+      "coverage": "生物医学、生命科学 / Biomedicine and Life Sciences",
+      "rate_limit_notes": "无明确限制 / No explicit limit"
+    },
+    
+    "core": {
+      "enabled": true,
+      "priority": 6,
+      "requires_api_key": true,
+      "api_key": "",
+      "description": "全球最大的开放获取论文聚合器 / World's largest Open Access papers aggregator",
+      "coverage": "全学科开放获取论文 / All disciplines Open Access papers",
+      "rate_limit_notes": "受订阅计划限制（免费版有配额） / Subject to subscription plan limits (free tier has quotas)",
+      "register_url": "https://core.ac.uk/services/api"
+    },
+    
+    "unpaywall": {
+      "enabled": true,
+      "priority": 7,
+      "requires_api_key": false,
+      "use_polite_pool": true,
+      "description": "DOI 开放获取版本查找 / DOI Open Access version finder",
+      "coverage": "全学科（基于 DOI） / All disciplines (DOI-based)",
+      "rate_limit_notes": "需要提供电子邮箱地址，100k req/day / Requires email address, 100k req/day"
+    },
+    
+    "dblp": {
+      "enabled": true,
+      "priority": 8,
+      "requires_api_key": false,
+      "description": "计算机科学文献数据库 / Computer Science bibliography database",
+      "coverage": "计算机科学及相关领域 / Computer Science and related fields",
+      "rate_limit_notes": "无明确限制，建议合理使用 / No explicit limit, use responsibly"
+    },
+    
+    "arxiv": {
+      "enabled": true,
+      "priority": 9,
+      "requires_api_key": false,
+      "description": "预印本论文数据库 / Preprint papers repository",
+      "coverage": "物理、数学、计算机、生物等 / Physics, Math, CS, Biology, etc.",
+      "rate_limit_notes": "建议每 3 秒 1 次请求 / Recommended: 1 request per 3 seconds"
+    },
+    
+    "biorxiv": {
+      "enabled": true,
+      "priority": 10,
+      "requires_api_key": false,
+      "description": "生物医学预印本论文数据库 / Biomedical preprint papers repository",
+      "coverage": "生物医学、生命科学预印本 / Biomedicine and Life Sciences preprints",
+      "rate_limit_notes": "无明确限制，建议合理使用 / No explicit limit, use responsibly"
+    }
+  },
+  
+  "query_settings": {
+    "delay_between_requests": 0.5,
+    "timeout": 10,
+    "max_retries": 3,
+    "stop_on_first_match": true,
+    "_note": "stop_on_first_match: 找到第一个匹配结果后是否停止查询其他平台 / Whether to stop querying other platforms after finding the first match"
+  },
+  
+  "output_settings": {
+    "generate_report": true,
+    "generate_backup": true,
+    "generate_updated_bib": true,
+    "generate_wrong_bib": true,
+    "report_format": "txt",
+    "timestamp_format": "%Y%m%d_%H%M%S"
+  }
+}
+
