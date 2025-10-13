@@ -32,6 +32,17 @@
 pip install -r requirements.txt
 ```
 
+### Install from PyPI and run directly
+
+```bash
+pip install bibverify
+
+# Run (optionally pass a config path; defaults to ./config.json)
+bibverify config.json
+# or
+bibverify
+```
+
 ## ⚙️ Configuration
 
 ### 1. Copy the config template

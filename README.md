@@ -32,6 +32,17 @@
 pip install -r requirements.txt
 ```
 
+### 从 PyPI 安装并直接使用
+
+```bash
+pip install bibverify
+
+# 运行（可传入配置文件路径，默认读取当前目录下的 config.json）
+bibverify config.json
+# 或
+bibverify
+```
+
 ## ⚙️ 配置设置
 
 ### 1. 复制配置文件
