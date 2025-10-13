@@ -7,7 +7,7 @@
 > 🔍 **English**: A multi-platform BibTeX reference verification and update tool that automatically checks and improves reference information through multiple academic database APIs.  
 > 📚 **Chinese**: A multi-platform BibTeX reference verification and update tool that automatically checks and improves reference information through multiple academic database APIs.
 
-[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE) [![Python](https://img.shields.io/badge/python-3.7+-green.svg)](https://www.python.org/) [![Stars](https://img.shields.io/github/stars/Hylouis233/bibverify?style=social)](https://github.com/Hylouis233/bibverify)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE) [![Python](https://img.shields.io/badge/python-3.7+-green.svg)](https://www.python.org/) [![Stars](https://img.shields.io/github/stars/Hylouis233/bibverify?style=social)](https://github.com/Hylouis233/bibverify) [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.17338090.svg)](https://doi.org/10.5281/zenodo.17338090)
 
 
 

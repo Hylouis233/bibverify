@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "bibverify"
+version = "0.1.0"
+description = "Bibverify: A Multi-Platform BibTeX Reference Verification Tool"
+readme = "README.md"
+requires-python = ">=3.7"
+authors = [
+  { name = "Hong Liu" }
+]
+license = { file = "LICENSE" }
+keywords = ["bibtex", "reference", "citation", "crossref", "openalex", "academic"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent"
+]
+dependencies = [
+  # 与 requirements.txt 对齐（运行时必要依赖）
+  "bibtexparser>=1.4.0",
+  "requests>=2.28.0"
+]
+
+[project.urls]
+Homepage = "https://github.com/Hylouis233/bibverify"
+Repository = "https://github.com/Hylouis233/bibverify"
+Issues = "https://github.com/Hylouis233/bibverify/issues"
+
+[project.scripts]
+bibverify = "bibverify.cli:main"
+
