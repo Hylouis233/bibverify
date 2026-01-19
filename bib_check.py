@@ -9,6 +9,7 @@ from bibtexparser.bwriter import BibTexWriter
 from bibtexparser.bibdatabase import BibDatabase
 from datetime import datetime
 import xml.etree.ElementTree as ET
+import html
 
 class LanguageSupport:
     def __init__(self, language='CN'):
@@ -131,6 +132,7 @@ class BibTeXChecker:
     def __init__(self, config_file='config.json'):
         self.config = self.load_config(config_file)
         self.bib_file = self.config.get('bib_file', 'sample.bib')
+        self.file_encoding = 'utf-8'
         self.db = None
         self.results = {
             'verified': [],
@@ -182,10 +184,27 @@ class BibTeXChecker:
         return [name for name, _ in enabled]
     
     def load_bib_file(self):
-        with open(self.bib_file, 'r', encoding='utf-8') as bibfile:
-            parser = BibTexParser(common_strings=True)
-            parser.ignore_nonstandard_types = False
-            self.db = bibtexparser.load(bibfile, parser)
+        encodings = ['utf-8', 'gbk', 'gb18030', 'latin1']
+        success = False
+        
+        for encoding in encodings:
+            try:
+                with open(self.bib_file, 'r', encoding=encoding) as bibfile:
+                    parser = BibTexParser(common_strings=True)
+                    parser.ignore_nonstandard_types = False
+                    self.db = bibtexparser.load(bibfile, parser)
+                success = True
+                self.file_encoding = encoding
+                break
+            except UnicodeDecodeError:
+                continue
+            except Exception as e:
+                print(f"Warning: Failed to load with encoding {encoding}: {e}")
+                continue
+        
+        if not success:
+            raise ValueError(f"无法加载文件 {self.bib_file}。请检查文件编码 (尝试了: {', '.join(encodings)})")
+
         print(self.lang.get_text('loaded_entries', count=len(self.db.entries)))
     
     def clean_title(self, title):
@@ -724,6 +743,9 @@ class BibTeXChecker:
         if value is None:
             return ''
         value = str(value).strip()
+        # 解码 HTML 实体 (如 &amp; -> &)
+        value = html.unescape(value)
+        
         if not value:
             return ''
         value = re.sub(r'\{+', '{', value)
@@ -1369,7 +1391,7 @@ class BibTeXChecker:
         updated_file = f'sample_updated_{timestamp}.bib'
         wrong_file = f'sample_wrong_{timestamp}.bib'
         
-        with open(self.bib_file, 'r', encoding='utf-8') as f:
+        with open(self.bib_file, 'r', encoding=self.file_encoding) as f:
             original_content = f.read()
         with open(backup_file, 'w', encoding='utf-8') as f:
             f.write(original_content)
