@@ -4,12 +4,15 @@ import time
 import requests
 import bibtexparser
 import os
+import sys
 from bibtexparser.bparser import BibTexParser
 from bibtexparser.bwriter import BibTexWriter
 from bibtexparser.bibdatabase import BibDatabase
 from datetime import datetime
 import xml.etree.ElementTree as ET
 import html
+from scholarly import scholarly
+
 
 class LanguageSupport:
     def __init__(self, language='CN'):
@@ -162,6 +165,7 @@ class BibTeXChecker:
                 'app_name': 'Bibverify'
             },
             'platforms': {
+                'google_scholar': {'enabled': True, 'priority': 0.5},
                 'crossref': {'enabled': True, 'priority': 1, 'use_polite_pool': True},
                 'arxiv': {'enabled': True, 'priority': 2},
                 'openalex': {'enabled': True, 'priority': 3, 'use_polite_pool': True}
@@ -688,6 +692,21 @@ class BibTeXChecker:
         except Exception as e:
             print(f"    {self.lang.get_text('unknown_error', platform='bioRxiv', error=str(e)[:50])}")
             return None
+
+    def query_google_scholar(self, title):
+        try:
+            search_query = scholarly.search_pubs(self.clean_title(title))
+            pub = next(search_query, None)
+            
+            if pub and self.is_title_match(title, pub['bib'].get('title', '')):
+                return ('google_scholar', scholarly.bibtex(pub))
+                
+        except Exception as e:
+            # Let the caller handle or just log it
+            print(f"    {self.lang.get_text('platform_error', platform='Google Scholar', error=str(e)[:50])}")
+            
+        return None
+
     
     def query_multi_platform(self, title, entry=None):
         stop_on_first = self.config.get('query_settings', {}).get('stop_on_first_match', True)
@@ -723,6 +742,8 @@ class BibTeXChecker:
                     result = self.query_base(title)
                 elif platform == 'biorxiv':
                     result = self.query_biorxiv(title)
+                elif platform == 'google_scholar':
+                    result = self.query_google_scholar(title)
                 else:
                     print(f"    {self.lang.get_text('platform_not_implemented', platform=platform.upper())}")
                     continue
@@ -1202,6 +1223,52 @@ class BibTeXChecker:
         
         return self.clean_entry(entry)
     
+    def clean_bibtex_braces(self, bibtex_str):
+        """
+        Remove double curly braces {{...}} from BibTeX string.
+        """
+        lines = bibtex_str.split('\n')
+        cleaned_lines = []
+        for line in lines:
+            # Match field assignment: key = {{value}} or key = {{value}},
+            match = re.search(r'(\s*\w+\s*=\s*)\{\{(.*?)\}\}(,?.*)', line)
+            if match:
+                prefix = match.group(1)
+                content = match.group(2)
+                suffix = match.group(3)
+                # Reconstruct with single braces
+                cleaned_line = f"{prefix}{{{content}}}{suffix}"
+                cleaned_lines.append(cleaned_line)
+            else:
+                cleaned_lines.append(line)
+        return '\n'.join(cleaned_lines)
+
+    def google_scholar_to_bibtex(self, bibtex_str, original_key):
+        # Clean braces first
+        cleaned_bibtex_str = self.clean_bibtex_braces(bibtex_str)
+        parser = BibTexParser(common_strings=True)
+        
+        try:
+            db = bibtexparser.loads(cleaned_bibtex_str, parser)
+        except Exception:
+            try:
+                db = bibtexparser.loads(bibtex_str, parser)
+            except:
+                return {'ID': original_key, 'ENTRYTYPE': 'misc', 'note': 'Failed to parse'}
+
+        if not db.entries:
+            return {'ID': original_key, 'ENTRYTYPE': 'misc'}
+            
+        entry = db.entries[0]
+        result = {'ID': original_key, 'ENTRYTYPE': entry.get('ENTRYTYPE', 'article')}
+        
+        for key, value in entry.items():
+            if key not in ['ID', 'ENTRYTYPE']:
+                result[key] = self.format_field_value(value, protect_case=True)
+            
+        return self.clean_entry(result)
+
+    
     def compare_entries(self, original, updated):
         differences = {}
         all_keys = set(original.keys()) | set(updated.keys())
@@ -1286,6 +1353,11 @@ class BibTeXChecker:
                     matched_title = biorxiv_data.get('title', '')
                     print(f"  {self.lang.get_text('matched_title', title=matched_title)}")
                     updated_entry = self.biorxiv_to_bibtex(biorxiv_data, entry_key)
+                elif platform == 'google_scholar':
+                    bibtex_str = query_result[1]
+                    updated_entry = self.google_scholar_to_bibtex(bibtex_str, entry_key)
+                    matched_title = updated_entry.get('title', '').replace('{', '').replace('}', '')
+                    print(f"  {self.lang.get_text('matched_title', title=matched_title)}")
                 else:
                     print(f"  {self.lang.get_text('unknown_platform', platform=platform)}")
                     self.results['errors'].append({
@@ -1500,7 +1572,6 @@ class BibTeXChecker:
 
 
 if __name__ == '__main__':
-    import sys
     config_file = sys.argv[1] if len(sys.argv) > 1 else 'config.json'
     checker = BibTeXChecker(config_file)
     checker.run()
