@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "bibverify"
-version = "0.1.0"
+version = "0.2.0"
 description = "Bibverify: A Multi-Platform BibTeX Reference Verification Tool"
 readme = "README.md"
 requires-python = ">=3.7"
@@ -34,3 +34,4 @@ bibverify = "bibverify.cli:main"
 
 [tool.setuptools]
 py-modules = ["bib_check"]
+packages = ["bibverify"]

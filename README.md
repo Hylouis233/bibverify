@@ -115,6 +115,40 @@ bibverify --doi 10.1038/nature12373 --key example2013
 
 该模式会直接调用 Crossref DOI 精确查询，并将结果打印为 BibTeX。
 
+### 一键接入大模型 / MCP / Skill
+
+为小白用户准备本地集成文件：
+
+```bash
+bibverify agent init --target codex --output .bibverify-agent --config config.json
+```
+
+生成内容：
+
+- `.bibverify-agent/SKILL.md`: 给大模型看的 Bibverify 调用说明
+- `.bibverify-agent/mcp.json`: MCP server 配置片段
+- `.bibverify-agent/README.md`: 本地接入说明
+
+启动 MCP stdio server：
+
+```bash
+bibverify mcp --config config.json
+```
+
+单独导出 skill：
+
+```bash
+bibverify skill export --target codex --output .bibverify-agent/SKILL.md
+```
+
+检查本地环境：
+
+```bash
+bibverify agent doctor --config config.json
+```
+
+MCP 当前暴露四个工具：`doi_to_bibtex`、`rank_lookup_sources`、`explain_update_diff`、`verify_bib_file`。大模型接入 MCP 后，可以直接调用这些工具完成 DOI 转 BibTeX、检索源排序解释、条目差异解释和 `.bib` 文件检查。
+
 ## 📁 输出文件
 
 程序会生成以下文件：

@@ -1758,6 +1758,7 @@ def build_arg_parser():
     parser = argparse.ArgumentParser(
         prog='bibverify',
         description='Verify BibTeX references and generate BibTeX from DOI metadata.',
+        epilog='Agent commands: bibverify mcp, bibverify skill export, bibverify agent init, bibverify agent doctor',
     )
     parser.add_argument('config_file', nargs='?', default='config.json', help='Path to config JSON file.')
     parser.add_argument('--doi', help='Fetch one DOI from Crossref and print a BibTeX entry.')
@@ -1765,7 +1766,79 @@ def build_arg_parser():
     return parser
 
 
+def _main_mcp(argv):
+    from bibverify.mcp_server import run_stdio_server
+
+    parser = argparse.ArgumentParser(prog='bibverify mcp', description='Run the Bibverify MCP stdio server.')
+    parser.add_argument('--config', default='config.json', help='Default Bibverify config path for MCP tools.')
+    args = parser.parse_args(argv)
+    return run_stdio_server(default_config=args.config)
+
+
+def _main_skill(argv):
+    from bibverify.agent import SUPPORTED_TARGETS, export_skill
+
+    parser = argparse.ArgumentParser(prog='bibverify skill', description='Export assistant skill files.')
+    subparsers = parser.add_subparsers(dest='command')
+    export_parser = subparsers.add_parser('export', help='Export a SKILL.md prompt for Bibverify.')
+    export_parser.add_argument('--target', choices=SUPPORTED_TARGETS, default='generic')
+    export_parser.add_argument('--output', help='Output file or directory. Defaults to stdout.')
+    export_parser.add_argument('--config', default='config.json', help='Default config path to mention in the skill.')
+
+    args = parser.parse_args(argv)
+    if args.command == 'export':
+        written = export_skill(target=args.target, output=args.output, config_file=args.config)
+        if written:
+            print(f"Skill written: {written}")
+        return 0
+
+    parser.print_help()
+    return 1
+
+
+def _main_agent(argv):
+    from bibverify.agent import SUPPORTED_TARGETS, doctor, format_doctor_report, init_agent
+
+    parser = argparse.ArgumentParser(prog='bibverify agent', description='Create and check AI assistant integration files.')
+    subparsers = parser.add_subparsers(dest='command')
+
+    init_parser = subparsers.add_parser('init', help='Create ready-to-copy MCP and skill files.')
+    init_parser.add_argument('--target', choices=SUPPORTED_TARGETS, default='generic')
+    init_parser.add_argument('--output', default='.bibverify-agent', help='Output directory.')
+    init_parser.add_argument('--config', default='config.json', help='Default Bibverify config path.')
+
+    doctor_parser = subparsers.add_parser('doctor', help='Check local Bibverify agent readiness.')
+    doctor_parser.add_argument('--config', default='config.json', help='Bibverify config path.')
+
+    args = parser.parse_args(argv)
+    if args.command == 'init':
+        paths = init_agent(target=args.target, output=args.output, config_file=args.config)
+        print("Created Bibverify agent integration files:")
+        for path in paths:
+            print(f"  {path}")
+        return 0
+
+    if args.command == 'doctor':
+        print(format_doctor_report(doctor(config_file=args.config)))
+        return 0
+
+    parser.print_help()
+    return 1
+
+
 def main(argv=None):
+    if argv is None:
+        argv = sys.argv[1:]
+
+    if argv:
+        command = argv[0]
+        if command == 'mcp':
+            return _main_mcp(argv[1:])
+        if command == 'skill':
+            return _main_skill(argv[1:])
+        if command == 'agent':
+            return _main_agent(argv[1:])
+
     parser = build_arg_parser()
     args = parser.parse_args(argv)
 

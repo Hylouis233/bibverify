@@ -115,6 +115,40 @@ bibverify --doi 10.1038/nature12373 --key example2013
 
 This mode queries Crossref by exact DOI and prints a BibTeX entry.
 
+### One-Step AI / MCP / Skill Integration
+
+Create local integration files for beginner users:
+
+```bash
+bibverify agent init --target codex --output .bibverify-agent --config config.json
+```
+
+Generated files:
+
+- `.bibverify-agent/SKILL.md`: Bibverify instructions for an AI assistant
+- `.bibverify-agent/mcp.json`: MCP server configuration snippet
+- `.bibverify-agent/README.md`: Local integration notes
+
+Start the MCP stdio server:
+
+```bash
+bibverify mcp --config config.json
+```
+
+Export only the skill file:
+
+```bash
+bibverify skill export --target codex --output .bibverify-agent/SKILL.md
+```
+
+Check local readiness:
+
+```bash
+bibverify agent doctor --config config.json
+```
+
+The MCP server currently exposes four tools: `doi_to_bibtex`, `rank_lookup_sources`, `explain_update_diff`, and `verify_bib_file`. Once an AI client has the MCP server configured, it can call these tools for DOI-to-BibTeX conversion, lookup-order explanation, entry-diff explanation, and `.bib` file verification.
+
 ## 📁 Output Files
 
 The program will generate the following files:
