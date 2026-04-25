@@ -32,3 +32,5 @@ Issues = "https://github.com/Hylouis233/bibverify/issues"
 [project.scripts]
 bibverify = "bibverify.cli:main"
 
+[tool.setuptools]
+py-modules = ["bib_check"]

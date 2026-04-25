@@ -16,12 +16,12 @@
 | 平台 | 优先级 | 学科覆盖 | API要求 | 特殊功能 |
 |------|--------|----------|---------|----------|
 | **CrossRef** | 1 | 全学科 | 无需API | Polite Pool |
-| **OpenAlex** | 2 | 全学科 | 无需API | 引用关系 |
+| **OpenAlex** | 2 | 全学科 | 建议/需要 API key | 引用关系 |
 | **Semantic Scholar** | 3 | 全学科 | 推荐API | AI 驱动 |
 | **PubMed** | 4 | 生物医学 | 可选API | 医学专业 |
 | **Europe PMC** | 5 | 生物医学 | 无需API | 欧洲医学 |
 | **CORE** | 6 | 开放获取 | 推荐API | 开放论文 |
-| **Unpaywall** | 7 | 全学科 | 需要邮箱 | 开放版本 |
+| **Unpaywall** | 后处理 | 全学科 | 需要邮箱 | 开放版本补充 |
 | **DBLP** | 8 | 计算机科学 | 无需API | CS 专业 |
 | **arXiv** | 9 | 预印本 | 无需API | 预印本 |
 | **bioRxiv** | 10 | 生物医学预印本 | 无需API | 生物预印本 |
@@ -107,6 +107,14 @@ python bib_check.py
 python bib_check.py config.json
 ```
 
+### 通过 DOI 生成单条 BibTeX
+
+```bash
+bibverify --doi 10.1038/nature12373 --key example2013
+```
+
+该模式会直接调用 Crossref DOI 精确查询，并将结果打印为 BibTeX。
+
 ## 📁 输出文件
 
 程序会生成以下文件：
@@ -134,7 +142,8 @@ python bib_check.py config.json
  ↓
 对每个条目：
  ├─ 提取标题
- ├─ 按优先级查询各平台
+ ├─ 根据 DOI/PMID/arXiv 等标识符动态调整平台顺序
+ ├─ 按调整后的优先级查询各平台
  ├─ 智能匹配文献信息
  ├─ 保持原有键值
  ├─ 比对字段差异
@@ -201,9 +210,17 @@ python bib_check.py config.json
 
 ## 🔧 高级配置
 
-### API API设置
+### API 设置
 
-部分平台需要 API API以获得更高访问速度：
+部分平台需要 API key 以获得更高访问速度或稳定访问：
+
+#### OpenAlex
+```json
+"openalex": {
+  "api_key": "your_api_key_here"
+}
+```
+注册地址: https://docs.openalex.org/how-to-use-the-api/getting-started/authentication
 
 #### Semantic Scholar
 ```json
@@ -249,6 +266,8 @@ python bib_check.py config.json
   "stop_on_first_match": true
 }
 ```
+
+检索顺序不是单纯静态表格顺序：如果条目已有 DOI，会优先走 Crossref DOI 精确查询；如果有 PMID/PMCID，会提升 PubMed 和 Europe PMC；如果有 arXiv 标识，会提升 arXiv。Unpaywall 当前只适合作为开放获取链接补充，不作为主文献元数据源。
 
 ## 📊 项目统计
 

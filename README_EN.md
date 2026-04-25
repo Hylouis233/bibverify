@@ -16,12 +16,12 @@
 | Platform | Priority | Discipline Coverage | API Requirement | Special Feature |
 |------|--------|----------|---------|----------|
 | **CrossRef** | 1 | All disciplines | No API | Polite Pool |
-| **OpenAlex** | 2 | All disciplines | No API | Citation graph |
+| **OpenAlex** | 2 | All disciplines | API key recommended/required | Citation graph |
 | **Semantic Scholar** | 3 | All disciplines | API recommended | AI-driven |
 | **PubMed** | 4 | Biomedicine | Optional API | Medical focus |
 | **Europe PMC** | 5 | Biomedicine | No API | European medical |
 | **CORE** | 6 | Open access | API recommended | Open papers |
-| **Unpaywall** | 7 | All disciplines | Email required | Open versions |
+| **Unpaywall** | Enrichment | All disciplines | Email required | Open-version enrichment |
 | **DBLP** | 8 | Computer Science | No API | CS-focused |
 | **arXiv** | 9 | Preprints | No API | Preprints |
 | **bioRxiv** | 10 | Biomedical preprints | No API | Biomedical preprints |
@@ -107,6 +107,14 @@ python bib_check.py
 python bib_check.py config.json
 ```
 
+### Generate one BibTeX entry from a DOI
+
+```bash
+bibverify --doi 10.1038/nature12373 --key example2013
+```
+
+This mode queries Crossref by exact DOI and prints a BibTeX entry.
+
 ## 📁 Output Files
 
 The program will generate the following files:
@@ -134,7 +142,8 @@ Load BibTeX file
  ↓
 For each entry:
  ├─ Extract title
- ├─ Query platforms by priority
+ ├─ Re-rank platforms from DOI/PMID/arXiv identifiers
+ ├─ Query platforms by adjusted priority
  ├─ Intelligently match bibliographic info
  ├─ Preserve original key
  ├─ Compare field differences
@@ -203,7 +212,15 @@ The generated BibTeX files follow a standard field order:
 
 ### API settings
 
-Some platforms require an API key for higher rate limits:
+Some platforms require an API key for higher rate limits or stable access:
+
+#### OpenAlex
+```json
+"openalex": {
+  "api_key": "your_api_key_here"
+}
+```
+Registration page: https://docs.openalex.org/how-to-use-the-api/getting-started/authentication
 
 #### Semantic Scholar
 ```json
@@ -249,6 +266,8 @@ For better throughput, set your email:
   "stop_on_first_match": true
 }
 ```
+
+The effective lookup order is not only the static table order. Entries with a DOI are promoted to Crossref DOI lookup first; entries with PMID/PMCID promote PubMed and Europe PMC; entries with an arXiv identifier promote arXiv. Unpaywall is currently treated as open-access enrichment, not as a primary bibliographic metadata source.
 
 ## 📊 Project Stats
 

@@ -31,11 +31,12 @@
     "openalex": {
       "enabled": true,
       "priority": 2,
-      "requires_api_key": false,
+      "requires_api_key": true,
+      "api_key": "",
       "use_polite_pool": true,
       "description": "开放学术图谱数据库 / Open academic knowledge graph",
       "coverage": "全学科，含引用、机构、作者关系 / All disciplines with citations, institutions, and authors",
-      "rate_limit_notes": "有邮箱: 突发请求更高; 100k/day / With email: higher burst limit; 100k/day"
+      "rate_limit_notes": "2026 起建议/实际需要免费 API key；无 key 仅适合测试 / Free API key recommended/required for real use since 2026; no-key access is for quick tests"
     },
     
     "semantic_scholar": {
@@ -81,11 +82,11 @@
     },
     
     "unpaywall": {
-      "enabled": true,
+      "enabled": false,
       "priority": 7,
       "requires_api_key": false,
       "use_polite_pool": true,
-      "description": "DOI 开放获取版本查找 / DOI Open Access version finder",
+      "description": "DOI 开放获取版本查找（当前作为后处理补充，不作为主检索源） / DOI Open Access version finder (currently enrichment-only, not a primary metadata source)",
       "coverage": "全学科（基于 DOI） / All disciplines (DOI-based)",
       "rate_limit_notes": "需要提供电子邮箱地址，100k req/day / Requires email address, 100k req/day"
     },
@@ -135,4 +136,3 @@
     "timestamp_format": "%Y%m%d_%H%M%S"
   }
 }
-

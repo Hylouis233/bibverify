@@ -1,3 +1,4 @@
+import argparse
 import re
 import json
 import time
@@ -5,13 +6,13 @@ import requests
 import bibtexparser
 import os
 import sys
+from urllib.parse import quote
 from bibtexparser.bparser import BibTexParser
 from bibtexparser.bwriter import BibTexWriter
 from bibtexparser.bibdatabase import BibDatabase
 from datetime import datetime
 import xml.etree.ElementTree as ET
 import html
-from scholarly import scholarly
 
 
 class LanguageSupport:
@@ -63,7 +64,10 @@ class LanguageSupport:
                 'no_update_skip': '[2/3] 无需更新的文献，跳过生成 updated 文件',
                 'wrong_generated': '[3/3] 问题文献已生成: {file}',
                 'wrong_count': '包含: {not_found} 条未找到 + {errors} 条错误',
-                'no_wrong_skip': '[3/3] 无问题文献，跳过生成 wrong 文件'
+                'no_wrong_skip': '[3/3] 无问题文献，跳过生成 wrong 文件',
+                'missing_optional_dependency': '{platform} 可选依赖缺失: {dependency}，请安装后重试或禁用该平台',
+                'doi_not_found': '未能通过 DOI 找到文献: {doi}',
+                'skip_enrichment_only': '[{platform}] ✗ 跳过（仅用于开放获取补充，不作为文献元数据源）'
             },
             'EN': {
                 'warning_config_not_found': 'Warning: Configuration file {config_file} not found, using default config',
@@ -110,7 +114,10 @@ class LanguageSupport:
                 'no_update_skip': '[2/3] No updates needed, skipping updated file generation',
                 'wrong_generated': '[3/3] Problem entries generated: {file}',
                 'wrong_count': 'Contains: {not_found} not found + {errors} errors',
-                'no_wrong_skip': '[3/3] No problem entries, skipping wrong file generation'
+                'no_wrong_skip': '[3/3] No problem entries, skipping wrong file generation',
+                'missing_optional_dependency': '{platform} optional dependency missing: {dependency}; install it or disable the platform',
+                'doi_not_found': 'Could not find a reference for DOI: {doi}',
+                'skip_enrichment_only': '[{platform}] ✗ Skipped (open-access enrichment only, not bibliographic metadata)'
             }
         }
     
@@ -165,10 +172,10 @@ class BibTeXChecker:
                 'app_name': 'Bibverify'
             },
             'platforms': {
-                'google_scholar': {'enabled': True, 'priority': 0.5},
                 'crossref': {'enabled': True, 'priority': 1, 'use_polite_pool': True},
-                'arxiv': {'enabled': True, 'priority': 2},
-                'openalex': {'enabled': True, 'priority': 3, 'use_polite_pool': True}
+                'openalex': {'enabled': True, 'priority': 2, 'use_polite_pool': True, 'requires_api_key': True, 'api_key': ''},
+                'arxiv': {'enabled': True, 'priority': 9},
+                'google_scholar': {'enabled': False, 'priority': 99}
             },
             'query_settings': {
                 'delay_between_requests': 0.5,
@@ -186,6 +193,75 @@ class BibTeXChecker:
                 enabled.append((name, settings.get('priority', 999)))
         enabled.sort(key=lambda x: x[1])
         return [name for name, _ in enabled]
+
+    def _has_arxiv_identifier(self, entry):
+        if not entry:
+            return False
+        archive_prefix = str(entry.get('archiveprefix', entry.get('archivePrefix', ''))).lower()
+        eprint = str(entry.get('eprint', ''))
+        url = str(entry.get('url', ''))
+        doi = self.canonicalize_doi(entry.get('doi', ''))
+        return (
+            archive_prefix == 'arxiv'
+            or 'arxiv.org' in url.lower()
+            or bool(re.match(r'^\d{4}\.\d{4,5}(v\d+)?$', eprint))
+            or doi.lower().startswith('10.48550/arxiv.')
+        )
+
+    def _looks_biomedical(self, entry, title):
+        if not entry:
+            return False
+        if entry.get('pmid') or entry.get('pmcid'):
+            return True
+        text = ' '.join(
+            str(entry.get(field, ''))
+            for field in ['journal', 'booktitle', 'publisher', 'keywords']
+        )
+        text = f"{text} {title}".lower()
+        biomedical_terms = [
+            'pubmed', 'pmc', 'medline', 'medicine', 'medical', 'biomed',
+            'biology', 'bioinformatics', 'genome', 'clinical', 'epidemiology',
+            'biorxiv', 'medrxiv'
+        ]
+        return any(term in text for term in biomedical_terms)
+
+    def _looks_computer_science(self, entry, title):
+        if not entry:
+            return False
+        text = ' '.join(
+            str(entry.get(field, ''))
+            for field in ['journal', 'booktitle', 'publisher', 'keywords']
+        )
+        text = f"{text} {title}".lower()
+        cs_terms = [
+            'acm', 'ieee', 'computer', 'computing', 'software',
+            'algorithm', 'machine learning', 'artificial intelligence',
+            'neural', 'conference on', 'symposium on'
+        ]
+        return any(term in text for term in cs_terms)
+
+    def _rank_platforms_for_entry(self, title, entry=None):
+        platforms = list(self.enabled_platforms)
+        if not entry:
+            return platforms
+
+        boosts = {}
+        if entry.get('doi'):
+            boosts['crossref'] = -100
+        if entry.get('pmid') or entry.get('pmcid') or self._looks_biomedical(entry, title):
+            boosts['pubmed'] = min(boosts.get('pubmed', 0), -80)
+            boosts['europe_pmc'] = min(boosts.get('europe_pmc', 0), -70)
+            boosts['biorxiv'] = min(boosts.get('biorxiv', 0), -30)
+        if self._has_arxiv_identifier(entry):
+            boosts['arxiv'] = min(boosts.get('arxiv', 0), -90)
+        if self._looks_computer_science(entry, title):
+            boosts['dblp'] = min(boosts.get('dblp', 0), -60)
+
+        original_position = {platform: idx for idx, platform in enumerate(platforms)}
+        return sorted(
+            platforms,
+            key=lambda platform: (boosts.get(platform, 0), original_position[platform]),
+        )
     
     def load_bib_file(self):
         encodings = ['utf-8', 'gbk', 'gb18030', 'latin1']
@@ -239,6 +315,66 @@ class BibTeXChecker:
             return True
         
         return False
+
+    def canonicalize_doi(self, doi):
+        if not doi:
+            return ''
+        doi = self.clean_title(str(doi)).strip()
+        doi = doi.strip('{}').strip()
+        doi = re.sub(r'^doi\s*:\s*', '', doi, flags=re.IGNORECASE)
+        doi = re.sub(r'^https?://(?:dx\.)?doi\.org/', '', doi, flags=re.IGNORECASE)
+        doi = doi.strip().strip('.,;')
+        return doi
+
+    def _crossref_headers(self):
+        use_polite = self.config.get('platforms', {}).get('crossref', {}).get('use_polite_pool', True)
+        user_agent = f'{self.app_name}/2.0 (mailto:{self.user_email})' if use_polite else f'{self.app_name}/2.0'
+        return {'User-Agent': user_agent}
+
+    def _crossref_params(self):
+        use_polite = self.config.get('platforms', {}).get('crossref', {}).get('use_polite_pool', True)
+        if use_polite and self.user_email:
+            return {'mailto': self.user_email}
+        return {}
+
+    def query_crossref_by_doi(self, doi, title=None):
+        doi = self.canonicalize_doi(doi)
+        if not doi:
+            return None
+
+        try:
+            base_url = f"https://api.crossref.org/works/{quote(doi, safe='')}"
+            timeout = self.config.get('query_settings', {}).get('timeout', 10)
+            response = requests.get(
+                base_url,
+                params=self._crossref_params(),
+                headers=self._crossref_headers(),
+                timeout=timeout,
+            )
+            response.raise_for_status()
+            data = response.json()
+            item = data.get('message', {})
+
+            if title:
+                candidate_title = item.get('title', [''])
+                candidate_title = candidate_title[0] if candidate_title else ''
+                if not candidate_title or not self.is_title_match(title, candidate_title):
+                    return None
+
+            return ('crossref', item) if item else None
+        except requests.exceptions.Timeout:
+            print(f"    {self.lang.get_text('timeout', platform='CrossRef')}")
+            return None
+        except requests.exceptions.HTTPError as e:
+            if e.response.status_code != 404:
+                print(f"    {self.lang.get_text('http_error', platform='CrossRef', code=e.response.status_code)}")
+            return None
+        except requests.exceptions.RequestException as e:
+            print(f"    {self.lang.get_text('network_error', platform='CrossRef', error=str(e)[:50])}")
+            return None
+        except Exception as e:
+            print(f"    {self.lang.get_text('unknown_error', platform='CrossRef', error=str(e)[:50])}")
+            return None
     
     def query_crossref(self, title):
         try:
@@ -248,14 +384,10 @@ class BibTeXChecker:
                 'query.title': clean_title,
                 'rows': 5
             }
-            use_polite = self.config.get('platforms', {}).get('crossref', {}).get('use_polite_pool', True)
-            user_agent = f'{self.app_name}/2.0 (mailto:{self.user_email})' if use_polite else f'{self.app_name}/2.0'
-            headers = {
-                'User-Agent': user_agent
-            }
+            params.update(self._crossref_params())
             
             timeout = self.config.get('query_settings', {}).get('timeout', 10)
-            response = requests.get(base_url, params=params, headers=headers, timeout=timeout)
+            response = requests.get(base_url, params=params, headers=self._crossref_headers(), timeout=timeout)
             response.raise_for_status()
             data = response.json()
             
@@ -333,6 +465,9 @@ class BibTeXChecker:
             use_polite = self.config.get('platforms', {}).get('openalex', {}).get('use_polite_pool', True)
             if use_polite:
                 params['mailto'] = self.user_email
+            api_key = self.config.get('platforms', {}).get('openalex', {}).get('api_key', '')
+            if api_key:
+                params['api_key'] = api_key
             
             headers = {
                 'User-Agent': f'{self.app_name}/2.0',
@@ -695,6 +830,12 @@ class BibTeXChecker:
 
     def query_google_scholar(self, title):
         try:
+            try:
+                from scholarly import scholarly
+            except ImportError:
+                print(f"    {self.lang.get_text('missing_optional_dependency', platform='Google Scholar', dependency='scholarly')}")
+                return None
+
             search_query = scholarly.search_pubs(self.clean_title(title))
             pub = next(search_query, None)
             
@@ -710,13 +851,17 @@ class BibTeXChecker:
     
     def query_multi_platform(self, title, entry=None):
         stop_on_first = self.config.get('query_settings', {}).get('stop_on_first_match', True)
+        best_result = None
         
-        for platform in self.enabled_platforms:
+        for platform in self._rank_platforms_for_entry(title, entry):
             try:
                 print(f"    {self.lang.get_text('querying_platform', platform=platform.upper())}")
                 
                 if platform == 'crossref':
-                    result = self.query_crossref(title)
+                    doi = entry.get('doi', '') if entry else ''
+                    result = self.query_crossref_by_doi(doi, title=title) if doi else None
+                    if not result:
+                        result = self.query_crossref(title)
                 elif platform == 'arxiv':
                     result = self.query_arxiv(title)
                 elif platform == 'openalex':
@@ -732,12 +877,8 @@ class BibTeXChecker:
                 elif platform == 'core':
                     result = self.query_core(title)
                 elif platform == 'unpaywall':
-                    doi = entry.get('doi', '') if entry else None
-                    if doi:
-                        result = self.query_unpaywall(title, doi)
-                    else:
-                        print(f"    {self.lang.get_text('skip_no_doi', platform=platform.upper())}")
-                        continue
+                    print(f"    {self.lang.get_text('skip_enrichment_only', platform=platform.upper())}")
+                    continue
                 elif platform == 'base':
                     result = self.query_base(title)
                 elif platform == 'biorxiv':
@@ -749,16 +890,18 @@ class BibTeXChecker:
                     continue
                 
                 if result:
-                        print(f"    {self.lang.get_text('found_match', platform=platform.upper())}")
-                        if stop_on_first:
-                            return result
-                        else:
-                            print(f"    {self.lang.get_text('not_found', platform=platform.upper())}")
+                    print(f"    {self.lang.get_text('found_match', platform=platform.upper())}")
+                    if stop_on_first:
+                        return result
+                    if best_result is None:
+                        best_result = result
+                else:
+                    print(f"    {self.lang.get_text('not_found', platform=platform.upper())}")
                 
             except Exception as e:
                 print(f"    {self.lang.get_text('platform_error', platform=platform.upper(), error=str(e)[:50])}")
         
-        return None
+        return best_result
     
     def format_field_value(self, value, protect_case=True):
         if value is None:
@@ -774,7 +917,7 @@ class BibTeXChecker:
         value = value.strip('{}')
         
         if protect_case:
-            return '{{' + value + '}}'
+            return '{' + value + '}'
         return value
     
     def clean_entry(self, entry):
@@ -1487,20 +1630,7 @@ class BibTeXChecker:
             cleaned_entry = self.clean_entry_for_writing(item['entry'])
             wrong_db.entries.append(cleaned_entry)
         
-        writer = BibTexWriter()
-        writer.indent = '  '
-        writer.order_entries_by = None
-        writer.common_strings = True
-        
-        field_order = [
-            'title', 'author', 'editor', 'journal', 'booktitle',
-            'volume', 'number', 'pages', 'year', 'month',
-            'publisher', 'organization', 'institution', 'address',
-            'edition', 'chapter', 'series', 'note', 'doi', 'url',
-            'eprint', 'archiveprefix', 'primaryclass', 'pmid', 'howpublished', 'school'
-        ]
-        writer.COMMON_STRINGS = []
-        writer.display_order = field_order
+        writer = self._create_bibtex_writer()
         
         if self.results['updated']:
             with open(updated_file, 'w', encoding='utf-8') as bibfile:
@@ -1523,6 +1653,59 @@ class BibTeXChecker:
             print(self.lang.get_text('no_wrong_skip'))
         
         return updated_file if self.results['updated'] else None, wrong_file if (self.results['not_found'] or self.results['errors']) else None
+
+    def _create_bibtex_writer(self):
+        writer = BibTexWriter()
+        writer.indent = '  '
+        writer.order_entries_by = None
+        writer.common_strings = True
+        writer.COMMON_STRINGS = []
+        writer.display_order = [
+            'title', 'author', 'editor', 'journal', 'booktitle',
+            'volume', 'number', 'pages', 'year', 'month',
+            'publisher', 'organization', 'institution', 'address',
+            'edition', 'chapter', 'series', 'note', 'doi', 'url',
+            'eprint', 'archiveprefix', 'primaryclass', 'pmid', 'howpublished', 'school'
+        ]
+        return writer
+
+    def entry_to_bibtex(self, entry):
+        db = BibDatabase()
+        db.entries.append(self.clean_entry_for_writing(entry))
+        content = self._create_bibtex_writer().write(db)
+        return content.replace('arXiv (Cornell University)', 'arXiv')
+
+    def generate_crossref_key(self, crossref_data, doi):
+        author = ''
+        authors = crossref_data.get('author', [])
+        if authors:
+            author = authors[0].get('family', '')
+        year = ''
+        if 'published' in crossref_data:
+            date_parts = crossref_data['published'].get('date-parts', [[]])[0]
+            if date_parts:
+                year = str(date_parts[0])
+        title_word = ''
+        titles = crossref_data.get('title', [])
+        if titles:
+            words = re.findall(r'[A-Za-z0-9]+', titles[0])
+            if words:
+                title_word = words[0]
+
+        raw_key = ''.join(part for part in [author, year, title_word] if part)
+        if not raw_key:
+            raw_key = self.canonicalize_doi(doi).split('/')[-1]
+        key = re.sub(r'[^A-Za-z0-9_:-]+', '_', raw_key).strip('_:-')
+        return key or 'crossref_entry'
+
+    def bibtex_from_doi(self, doi, key=None):
+        result = self.query_crossref_by_doi(doi)
+        if not result:
+            return None
+        crossref_data = result[1]
+        entry_key = key or self.generate_crossref_key(crossref_data, doi)
+        entry = self.crossref_to_bibtex(crossref_data, entry_key)
+        return self.entry_to_bibtex(entry)
     
     def run(self):
         print("=" * 80)
@@ -1571,7 +1754,33 @@ class BibTeXChecker:
         self.generate_updated_bib()
 
 
-if __name__ == '__main__':
-    config_file = sys.argv[1] if len(sys.argv) > 1 else 'config.json'
-    checker = BibTeXChecker(config_file)
+def build_arg_parser():
+    parser = argparse.ArgumentParser(
+        prog='bibverify',
+        description='Verify BibTeX references and generate BibTeX from DOI metadata.',
+    )
+    parser.add_argument('config_file', nargs='?', default='config.json', help='Path to config JSON file.')
+    parser.add_argument('--doi', help='Fetch one DOI from Crossref and print a BibTeX entry.')
+    parser.add_argument('--key', help='BibTeX key to use with --doi.')
+    return parser
+
+
+def main(argv=None):
+    parser = build_arg_parser()
+    args = parser.parse_args(argv)
+
+    checker = BibTeXChecker(args.config_file)
+    if args.doi:
+        bibtex = checker.bibtex_from_doi(args.doi, key=args.key)
+        if not bibtex:
+            print(checker.lang.get_text('doi_not_found', doi=args.doi), file=sys.stderr)
+            return 1
+        print(bibtex.strip())
+        return 0
+
     checker.run()
+    return 0
+
+
+if __name__ == '__main__':
+    raise SystemExit(main())
