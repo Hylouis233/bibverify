@@ -1,0 +1,2 @@
+include server.json
+recursive-include clawhub *.md
