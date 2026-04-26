@@ -150,6 +150,7 @@ class BibTeXChecker:
             'not_found': [],
             'errors': []
         }
+        self.last_output_files = {}
         self.user_email = self.config.get('user_info', {}).get('email', 'research@example.com')
         self.app_name = self.config.get('user_info', {}).get('app_name', 'Bibverify')
         self.enabled_platforms = self._get_enabled_platforms()
@@ -1597,20 +1598,28 @@ class BibTeXChecker:
                     f.write("\n" + "-" * 80 + "\n\n")
         
         print(f"\n{self.lang.get_text('report_generated', file=report_file)}")
+        self.last_output_files['report'] = report_file
         return report_file
+
+    def _output_prefix(self):
+        stem = os.path.splitext(os.path.basename(self.bib_file))[0]
+        prefix = re.sub(r'[^A-Za-z0-9._-]+', '_', stem).strip('._-')
+        return prefix or 'bibverify'
     
     def generate_updated_bib(self):
         timestamp_format = self.config.get('output_settings', {}).get('timestamp_format', '%Y%m%d_%H%M%S')
         timestamp = datetime.now().strftime(timestamp_format)
-        backup_file = f'sample_backup_{timestamp}.bib'
-        updated_file = f'sample_updated_{timestamp}.bib'
-        wrong_file = f'sample_wrong_{timestamp}.bib'
+        output_prefix = self._output_prefix()
+        backup_file = f'{output_prefix}_backup_{timestamp}.bib'
+        updated_file = f'{output_prefix}_updated_{timestamp}.bib'
+        wrong_file = f'{output_prefix}_wrong_{timestamp}.bib'
         
         with open(self.bib_file, 'r', encoding=self.file_encoding) as f:
             original_content = f.read()
         with open(backup_file, 'w', encoding='utf-8') as f:
             f.write(original_content)
         print(f"\n{self.lang.get_text('backup_generated', file=backup_file)}")
+        self.last_output_files['backup'] = backup_file
         
         updated_db = BibDatabase()
         wrong_db = BibDatabase()
@@ -1639,8 +1648,10 @@ class BibTeXChecker:
                 bibfile.write(content)
             print(f"{self.lang.get_text('updated_generated', file=updated_file)}")
             print(f"      {self.lang.get_text('updated_count', count=len(self.results['updated']))}")
+            self.last_output_files['updated'] = updated_file
         else:
             print(self.lang.get_text('no_update_skip'))
+            self.last_output_files['updated'] = None
         
         if self.results['not_found'] or self.results['errors']:
             with open(wrong_file, 'w', encoding='utf-8') as bibfile:
@@ -1649,10 +1660,25 @@ class BibTeXChecker:
                 bibfile.write(content)
             print(f"{self.lang.get_text('wrong_generated', file=wrong_file)}")
             print(f"      {self.lang.get_text('wrong_count', not_found=len(self.results['not_found']), errors=len(self.results['errors']))}")
+            self.last_output_files['wrong'] = wrong_file
         else:
             print(self.lang.get_text('no_wrong_skip'))
+            self.last_output_files['wrong'] = None
         
         return updated_file if self.results['updated'] else None, wrong_file if (self.results['not_found'] or self.results['errors']) else None
+
+    def get_run_summary(self):
+        return {
+            'bib_file': self.bib_file,
+            'counts': {
+                'total': len(self.db.entries) if self.db else 0,
+                'verified': len(self.results['verified']),
+                'updated': len(self.results['updated']),
+                'not_found': len(self.results['not_found']),
+                'errors': len(self.results['errors']),
+            },
+            'files': dict(self.last_output_files),
+        }
 
     def _create_bibtex_writer(self):
         writer = BibTexWriter()
@@ -1752,6 +1778,7 @@ class BibTeXChecker:
         
         self.generate_report()
         self.generate_updated_bib()
+        return self.get_run_summary()
 
 
 def build_arg_parser():

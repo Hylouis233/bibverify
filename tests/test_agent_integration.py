@@ -3,6 +3,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from bibverify.agent import build_mcp_config, build_skill_markdown, doctor, init_agent
 from bibverify.mcp_server import handle_request, run_stdio_server
@@ -54,6 +55,33 @@ class AgentIntegrationTests(unittest.TestCase):
         response = json.loads(stdout.getvalue())
         self.assertEqual(response["id"], 1)
         self.assertIn("tools", response["result"])
+
+    def test_verify_bib_file_returns_structured_summary(self):
+        with patch("bibverify.mcp_server.BibTeXChecker") as checker_class:
+            checker = checker_class.return_value
+            checker.run.return_value = {
+                "bib_file": "references.bib",
+                "counts": {"total": 1, "verified": 1, "updated": 0, "not_found": 0, "errors": 0},
+                "files": {
+                    "report": "bib_check_report_fixed.txt",
+                    "backup": "references_backup_fixed.bib",
+                    "updated": None,
+                    "wrong": None,
+                },
+            }
+
+            response = handle_request(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 3,
+                    "method": "tools/call",
+                    "params": {"name": "verify_bib_file", "arguments": {"config_file": "config.json"}},
+                }
+            )
+
+        structured = response["result"]["structuredContent"]
+        self.assertEqual(structured["counts"]["total"], 1)
+        self.assertEqual(structured["files"]["backup"], "references_backup_fixed.bib")
 
 
 if __name__ == "__main__":

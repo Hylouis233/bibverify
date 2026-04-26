@@ -52,7 +52,7 @@ pip install -U bibverify
 ## Safety
 
 - Do not silently overwrite the source `.bib` file.
-- Tell the user that Bibverify writes timestamped backup, updated, and problem-entry files.
+- Tell the user that Bibverify writes timestamped backup, updated, and problem-entry files using the input `.bib` filename stem.
 - Do not invent missing bibliographic metadata. Use Bibverify results and explain uncertainty when sources disagree.
 - Do not expose API keys or local config secrets in the answer.
 

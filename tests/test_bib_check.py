@@ -1,6 +1,10 @@
 import io
+import json
+import os
+import tempfile
 import unittest
 from contextlib import redirect_stdout
+from pathlib import Path
 
 from bib_check import BibTeXChecker
 
@@ -79,6 +83,39 @@ class BibTeXCheckerRankingTests(unittest.TestCase):
 
         self.assertIn("title = {{A Mixed Case Title}}", bibtex)
         self.assertNotIn("{{{A Mixed Case Title}}}", bibtex)
+
+    def test_output_files_use_input_bib_stem(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            bib_path = tmp_path / "my refs.bib"
+            config_path = tmp_path / "config.json"
+            bib_path.write_text(
+                "@article{demo,\n  title={Demo},\n  author={Author},\n  year={2026}\n}\n",
+                encoding="utf-8",
+            )
+            config_path.write_text(
+                json.dumps(
+                    {
+                        "bib_file": str(bib_path),
+                        "output_settings": {"timestamp_format": "fixed"},
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            old_cwd = os.getcwd()
+            try:
+                os.chdir(tmp)
+                with redirect_stdout(io.StringIO()):
+                    checker = BibTeXChecker(str(config_path))
+                    checker.results = {"verified": [], "updated": [], "not_found": [], "errors": []}
+                    checker.generate_updated_bib()
+            finally:
+                os.chdir(old_cwd)
+
+            self.assertTrue((tmp_path / "my_refs_backup_fixed.bib").exists())
+            self.assertFalse((tmp_path / "sample_backup_fixed.bib").exists())
+            self.assertEqual(checker.last_output_files["backup"], "my_refs_backup_fixed.bib")
 
 
 if __name__ == "__main__":

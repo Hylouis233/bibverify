@@ -105,6 +105,8 @@ Current release pages:
 
 - PyPI: https://pypi.org/project/bibverify/
 - GitHub Releases: https://github.com/Hylouis233/bibverify/releases
+- MCP Registry: `io.github.Hylouis233/bibverify`
+- ClawHub/OpenClaw skill: `bibverify`
 
 ## ⚙️ Configuration
 
@@ -230,7 +232,7 @@ Check local readiness:
 bibverify agent doctor --config config.json
 ```
 
-The MCP server currently exposes four tools: `doi_to_bibtex`, `rank_lookup_sources`, `explain_update_diff`, and `verify_bib_file`. Once an AI client has the MCP server configured, it can call these tools for DOI-to-BibTeX conversion, lookup-order explanation, entry-diff explanation, and `.bib` file verification.
+The MCP server currently exposes four tools: `doi_to_bibtex`, `rank_lookup_sources`, `explain_update_diff`, and `verify_bib_file`. Once an AI client has the MCP server configured, it can call these tools for DOI-to-BibTeX conversion, lookup-order explanation, entry-diff explanation, and `.bib` file verification. `verify_bib_file` also returns structured counts and generated file names so agents can continue processing reliably.
 
 Copyable MCP configuration snippet:
 
@@ -245,22 +247,27 @@ Copyable MCP configuration snippet:
 }
 ```
 
+Published entry points:
+
+- MCP Registry name: `io.github.Hylouis233/bibverify`
+- ClawHub/OpenClaw skill slug: `bibverify`
+
 ## 📁 Output Files
 
-The program will generate the following files. The current version uses the fixed `sample_` prefix for generated `.bib` outputs and does not overwrite your source file in place:
+The program will generate the following files and does not overwrite your source file in place. Generated `.bib` outputs use the input filename stem as their prefix; for example, `references.bib` writes `references_backup_*`, `references_updated_*`, and `references_wrong_*`:
 
 1. **Check report** (`bib_check_report_YYYYMMDD_HHMMSS.txt`)
    - List of references that passed verification
    - References that need updates with detailed differences
    - List of references not found
 
-2. **Backup file** (`sample_backup_YYYYMMDD_HHMMSS.bib`)
+2. **Backup file** (`references_backup_YYYYMMDD_HHMMSS.bib`)
    - Full backup of the original BibTeX file
 
-3. **Updated file** (`sample_updated_YYYYMMDD_HHMMSS.bib`)
+3. **Updated file** (`references_updated_YYYYMMDD_HHMMSS.bib`)
    - All updated reference entries
 
-4. **Problem file** (`sample_wrong_YYYYMMDD_HHMMSS.bib`)
+4. **Problem file** (`references_wrong_YYYYMMDD_HHMMSS.bib`)
    - Entries not found or failed during processing
 
 ## 🔄 Workflow

@@ -131,9 +131,9 @@ def _call_tool(name, arguments, default_config="config.json"):
             return _text_result(text, structured={"differences": differences})
 
         if name == "verify_bib_file":
-            checker.run()
+            summary = checker.run()
             output = captured.getvalue().strip()
-            return _text_result(output or "Bibverify completed.")
+            return _text_result(output or "Bibverify completed.", structured=summary)
 
     raise ValueError("Unknown tool: " + name)
 

@@ -105,6 +105,8 @@ pip install -r requirements.txt
 
 - PyPI: https://pypi.org/project/bibverify/
 - GitHub Releases: https://github.com/Hylouis233/bibverify/releases
+- MCP Registry: `io.github.Hylouis233/bibverify`
+- ClawHub/OpenClaw skill: `bibverify`
 
 ## ⚙️ 配置设置
 
@@ -230,7 +232,7 @@ bibverify skill export --target codex --output .bibverify-agent/SKILL.md
 bibverify agent doctor --config config.json
 ```
 
-MCP 当前暴露四个工具：`doi_to_bibtex`、`rank_lookup_sources`、`explain_update_diff`、`verify_bib_file`。大模型接入 MCP 后，可以直接调用这些工具完成 DOI 转 BibTeX、检索源排序解释、条目差异解释和 `.bib` 文件检查。
+MCP 当前暴露四个工具：`doi_to_bibtex`、`rank_lookup_sources`、`explain_update_diff`、`verify_bib_file`。大模型接入 MCP 后，可以直接调用这些工具完成 DOI 转 BibTeX、检索源排序解释、条目差异解释和 `.bib` 文件检查。`verify_bib_file` 同时返回结构化的检查计数和生成文件名，便于 agent 继续处理。
 
 可复制的 MCP 配置片段：
 
@@ -245,22 +247,27 @@ MCP 当前暴露四个工具：`doi_to_bibtex`、`rank_lookup_sources`、`explai
 }
 ```
 
+已发布入口：
+
+- MCP Registry 名称：`io.github.Hylouis233/bibverify`
+- ClawHub/OpenClaw skill slug：`bibverify`
+
 ## 📁 输出文件
 
-程序会生成以下文件。当前版本的 `.bib` 输出文件名使用固定前缀 `sample_`，不会原地覆盖你的源文件：
+程序会生成以下文件，不会原地覆盖你的源文件。`.bib` 输出文件使用输入文件名 stem 作为前缀，例如 `references.bib` 会生成 `references_backup_*`、`references_updated_*` 和 `references_wrong_*`：
 
 1. **检查报告** (`bib_check_report_YYYYMMDD_HHMMSS.txt`)
    - 验证通过的文献列表
    - 需要更新的文献及其差异详情
    - 未找到的文献列表
 
-2. **备份文件** (`sample_backup_YYYYMMDD_HHMMSS.bib`)
+2. **备份文件** (`references_backup_YYYYMMDD_HHMMSS.bib`)
    - 原始 BibTeX 文件的完整备份
 
-3. **更新文件** (`sample_updated_YYYYMMDD_HHMMSS.bib`)
+3. **更新文件** (`references_updated_YYYYMMDD_HHMMSS.bib`)
    - 包含所有更新后的文献条目
 
-4. **问题文件** (`sample_wrong_YYYYMMDD_HHMMSS.bib`)
+4. **问题文件** (`references_wrong_YYYYMMDD_HHMMSS.bib`)
    - 包含未找到或处理错误的文献
 
 ## 🔄 工作流程
