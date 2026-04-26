@@ -163,7 +163,17 @@ class BibTeXChecker:
             print(f"警告: 配置文件 {config_file} 不存在，使用默认配置")
             return self._get_default_config()
         with open(config_file, 'r', encoding='utf-8') as f:
-            return json.load(f)
+            user_config = json.load(f)
+        return self._merge_config(self._get_default_config(), user_config)
+
+    def _merge_config(self, default_config, user_config):
+        merged = default_config.copy()
+        for key, value in user_config.items():
+            if isinstance(value, dict) and isinstance(merged.get(key), dict):
+                merged[key] = self._merge_config(merged[key], value)
+            else:
+                merged[key] = value
+        return merged
     
     def _get_default_config(self):
         return {

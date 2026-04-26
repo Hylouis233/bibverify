@@ -23,6 +23,33 @@ class BibTeXCheckerRankingTests(unittest.TestCase):
         )
         self.assertEqual(checker.canonicalize_doi("doi: 10.1000/example;"), "10.1000/example")
 
+    def test_partial_config_inherits_default_platforms(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            bib_path = tmp_path / "references.bib"
+            config_path = tmp_path / "config.json"
+            bib_path.write_text("", encoding="utf-8")
+            config_path.write_text(
+                json.dumps(
+                    {
+                        "language": "EN",
+                        "bib_file": str(bib_path),
+                        "user_info": {"email": "user@example.com"},
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            with redirect_stdout(io.StringIO()):
+                checker = BibTeXChecker(str(config_path))
+
+        self.assertEqual(checker.user_email, "user@example.com")
+        self.assertEqual(checker.app_name, "Bibverify")
+        self.assertIn("crossref", checker.enabled_platforms)
+        self.assertIn("openalex", checker.enabled_platforms)
+        self.assertIn("arxiv", checker.enabled_platforms)
+        self.assertEqual(checker.config["query_settings"]["timeout"], 10)
+
     def test_identifier_hints_promote_more_specific_sources(self):
         checker = self.make_checker()
         checker.enabled_platforms = [
