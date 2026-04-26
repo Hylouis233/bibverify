@@ -1,6 +1,6 @@
 # Bibverify - BibTeX Reference Verification Tool
 
-<!-- mcp-name: io.github.hylouis233/bibverify -->
+<!-- mcp-name: io.github.Hylouis233/bibverify -->
 
 <p align="center">
 <a href="README_EN.md"><img src="https://img.shields.io/badge/English-README-blue.svg" alt="English README"></a> | <a href="README.md"><img src="https://img.shields.io/badge/中文-README-red.svg" alt="中文 README"></a>

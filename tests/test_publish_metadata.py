@@ -13,7 +13,7 @@ class PublishMetadataTests(unittest.TestCase):
     def test_mcp_registry_metadata_matches_package(self):
         server = json.loads((ROOT / "server.json").read_text(encoding="utf-8"))
 
-        self.assertEqual(server["name"], "io.github.hylouis233/bibverify")
+        self.assertEqual(server["name"], "io.github.Hylouis233/bibverify")
         self.assertEqual(server["version"], bibverify.__version__)
         self.assertEqual(server["packages"][0]["registryType"], "pypi")
         self.assertEqual(server["packages"][0]["identifier"], "bibverify")
@@ -23,7 +23,7 @@ class PublishMetadataTests(unittest.TestCase):
     def test_readme_contains_mcp_registry_ownership_marker(self):
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
 
-        self.assertIn("mcp-name: io.github.hylouis233/bibverify", readme)
+        self.assertIn("mcp-name: io.github.Hylouis233/bibverify", readme)
 
     def test_project_version_matches_package_version(self):
         pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
