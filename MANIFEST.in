@@ -1,2 +1,4 @@
 include server.json
+include README_EN.md
+include config_template.json
 recursive-include clawhub *.md

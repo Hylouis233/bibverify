@@ -12,8 +12,11 @@ config.json
 # Distribution / packaging
 .Python
 build/
+build/pyinstaller/
 develop-eggs/
 dist/
+dist-standalone/
+release/
 downloads/
 eggs/
 .eggs/
@@ -193,6 +196,10 @@ cython_debug/
 
 # Ruff stuff:
 .ruff_cache/
+
+# Local type-checker and build smoke environments
+.venv-wheel-smoke/
+.venv-standalone/
 
 # PyPI configuration file
 .pypirc

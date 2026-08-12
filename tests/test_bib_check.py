@@ -111,6 +111,17 @@ class BibTeXCheckerRankingTests(unittest.TestCase):
         self.assertIn("title = {{A Mixed Case Title}}", bibtex)
         self.assertNotIn("{{{A Mixed Case Title}}}", bibtex)
 
+    def test_title_match_rejects_short_incidental_substrings(self):
+        checker = self.make_checker()
+
+        self.assertFalse(checker.is_title_match("AI", "A survey of explainable AI systems"))
+        self.assertTrue(
+            checker.is_title_match(
+                "Detecting Influenza Epidemics using Search Engine Query Data",
+                "Detecting influenza epidemics using search-engine query data",
+            )
+        )
+
     def test_output_files_use_input_bib_stem(self):
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
@@ -142,7 +153,9 @@ class BibTeXCheckerRankingTests(unittest.TestCase):
 
             self.assertTrue((tmp_path / "my_refs_backup_fixed.bib").exists())
             self.assertFalse((tmp_path / "sample_backup_fixed.bib").exists())
-            self.assertEqual(checker.last_output_files["backup"], "my_refs_backup_fixed.bib")
+            self.assertEqual(
+                Path(checker.last_output_files["backup"]).name, "my_refs_backup_fixed.bib"
+            )
 
 
 if __name__ == "__main__":

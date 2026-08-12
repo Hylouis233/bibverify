@@ -5,7 +5,6 @@ from pathlib import Path
 
 import bibverify
 
-
 ROOT = Path(__file__).resolve().parents[1]
 
 

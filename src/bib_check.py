@@ -1,4 +1,4 @@
-"""Compatibility import for Bibverify 0.2 users.
+"""Installed compatibility module for Bibverify 0.2 users.
 
 New code should import :class:`bibverify.checker.BibTeXChecker` instead.
 """
@@ -9,7 +9,7 @@ __all__ = ["BibTeXChecker", "LanguageSupport", "main"]
 
 
 def main(argv=None):
-    """Delegate the legacy script entry point to the modern CLI."""
+    """Delegate the legacy module entry point to the modern CLI."""
     from bibverify.cli import main as cli_main
 
     return cli_main(argv)
