@@ -1,11 +1,15 @@
+"""Helpers for configuring AI-assistant integrations."""
+
 import json
 import os
 import sys
 from pathlib import Path
 
 import bibtexparser
+import mcp
 import requests
 
+from bibverify.config import load_config
 
 SUPPORTED_TARGETS = ("generic", "codex", "claude", "cursor")
 
@@ -45,7 +49,8 @@ description: Verify, repair, and generate BibTeX references through the Bibverif
 1. Prefer `doi_to_bibtex` when the user gives a DOI.
 2. Use `rank_lookup_sources` before a full verification when the user asks why a source is queried first.
 3. Use `verify_bib_file` for project-level `.bib` verification. The default config file is `{config_file}`.
-4. Explain any changed fields in plain language. Do not silently overwrite the user's source `.bib`; Bibverify writes timestamped backup, updated, and wrong-entry files.
+4. Explain any changed fields in plain language. Do not silently overwrite the user's source `.bib`; default verification writes timestamped reports, backups, updated proposals, and manual-review files. Only an explicit `--apply` changes the source.
+5. Distinguish `not_found` from `source_unavailable`, and do not call an unindexed reference fake or fabricated.
 
 ## Example User Requests
 
@@ -99,7 +104,10 @@ def init_agent(target="generic", output=".bibverify-agent", config_file="config.
     readme_path = output_dir / "README.md"
 
     write_text(skill_path, build_skill_markdown(target=target, config_file=config_file))
-    write_text(mcp_path, json.dumps(build_mcp_config(config_file=config_file), ensure_ascii=False, indent=2) + "\n")
+    write_text(
+        mcp_path,
+        json.dumps(build_mcp_config(config_file=config_file), ensure_ascii=False, indent=2) + "\n",
+    )
     write_text(
         readme_path,
         f"""# Bibverify Agent Integration
@@ -131,28 +139,58 @@ bibverify --doi 10.1038/nature12373 --key example2013
 def doctor(config_file="config.json"):
     checks = []
 
-    def add(name, ok, detail):
-        checks.append({"name": name, "ok": bool(ok), "detail": detail})
+    def add(name, ok, detail, *, required=False):
+        checks.append({"name": name, "ok": bool(ok), "detail": detail, "required": required})
 
-    add("python", True, sys.version.split()[0])
-    add("bibtexparser", True, getattr(bibtexparser, "__version__", "installed"))
-    add("requests", True, getattr(requests, "__version__", "installed"))
+    add("python", sys.version_info >= (3, 11), sys.version.split()[0], required=True)
+    add("bibtexparser", True, getattr(bibtexparser, "__version__", "installed"), required=True)
+    add("requests", True, getattr(requests, "__version__", "installed"), required=True)
+    add("mcp", True, getattr(mcp, "__version__", "installed"), required=True)
 
-    config_exists = os.path.exists(config_file)
-    add("config", config_exists, config_file if config_exists else "missing; Bibverify will use defaults")
+    config_path = Path(config_file).expanduser().resolve(strict=False)
+    config_exists = config_path.exists()
+    add(
+        "config",
+        config_exists,
+        config_file if config_exists else "missing; Bibverify will use defaults",
+    )
 
-    bib_file = None
     if config_exists:
         try:
-            with open(config_file, "r", encoding="utf-8") as f:
-                config = json.load(f)
-            bib_file = config.get("bib_file")
-            add("config-json", True, "valid JSON")
-        except Exception as exc:
-            add("config-json", False, str(exc))
-
-    if bib_file:
-        add("bib-file", os.path.exists(bib_file), bib_file)
+            config, _ = load_config(config_path)
+            add("config-json", True, "valid JSON", required=True)
+            bib_path = Path(config["bib_file"])
+            add("bib-file", bib_path.is_file(), str(bib_path), required=True)
+            output_dir = Path(config["output_dir"])
+            writable_parent = next(
+                (path for path in [output_dir, *output_dir.parents] if path.exists()), None
+            )
+            add(
+                "output-dir",
+                writable_parent is not None and os.access(writable_parent, os.W_OK),
+                str(output_dir),
+                required=True,
+            )
+            for provider, settings in config.get("platforms", {}).items():
+                if not settings.get("enabled"):
+                    continue
+                if provider == "core":
+                    add(
+                        "provider-core-key",
+                        bool(settings.get("api_key")),
+                        "configured"
+                        if settings.get("api_key")
+                        else "missing BIBVERIFY_CORE_API_KEY",
+                        required=True,
+                    )
+                elif provider in {"openalex", "semantic_scholar", "pubmed"}:
+                    add(
+                        f"provider-{provider}-key",
+                        True,
+                        "configured" if settings.get("api_key") else "optional key not configured",
+                    )
+        except (OSError, ValueError, json.JSONDecodeError) as exc:
+            add("config-json", False, str(exc), required=True)
 
     add("mcp-command", True, f"bibverify mcp --config {config_file}")
     return checks
@@ -161,6 +199,6 @@ def doctor(config_file="config.json"):
 def format_doctor_report(checks):
     lines = ["Bibverify agent doctor"]
     for check in checks:
-        status = "OK" if check["ok"] else "WARN"
+        status = "OK" if check["ok"] else ("ERROR" if check.get("required") else "WARN")
         lines.append(f"[{status}] {check['name']}: {check['detail']}")
     return "\n".join(lines)

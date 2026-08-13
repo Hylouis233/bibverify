@@ -1,37 +1,141 @@
 [build-system]
-requires = ["setuptools>=68", "wheel"]
+requires = ["setuptools>=77", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "bibverify"
-version = "0.2.4"
-description = "Bibverify: A Multi-Platform BibTeX Reference Verification Tool"
+dynamic = ["version"]
+description = "Verify, repair, and enrich BibTeX references across academic metadata providers"
 readme = "README.md"
-requires-python = ">=3.7"
-authors = [
-  { name = "Hong Liu" }
-]
-license = { file = "LICENSE" }
-keywords = ["bibtex", "reference", "citation", "crossref", "openalex", "academic"]
+requires-python = ">=3.11"
+authors = [{ name = "Hong Liu" }]
+license = "MIT"
+keywords = ["bibtex", "reference", "citation", "crossref", "openalex", "academic", "mcp"]
 classifiers = [
+  "Development Status :: 4 - Beta",
+  "Environment :: Console",
+  "Operating System :: OS Independent",
   "Programming Language :: Python :: 3",
-  "License :: OSI Approved :: MIT License",
-  "Operating System :: OS Independent"
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
+  "Topic :: Scientific/Engineering :: Information Analysis",
 ]
 dependencies = [
-  # 与 requirements.txt 对齐（运行时必要依赖）
-  "bibtexparser>=1.4.0",
-  "requests>=2.28.0"
+  "bibtexparser>=1.4.3,<2",
+  "mcp>=2.0,<3",
+  "requests>=2.32,<3",
+  "rich>=13.9,<15",
+  "typer>=0.16,<1",
+]
+
+[project.optional-dependencies]
+google-scholar = ["scholarly>=1.7,<2"]
+dev = [
+  "build>=1.3,<2",
+  "cyclonedx-bom>=7.1,<8",
+  "mypy>=1.17,<2",
+  "pip-audit>=2.9,<3",
+  "pyinstaller>=6.16,<7",
+  "PyYAML>=6.0.2,<7",
+  "pytest>=8.4,<10",
+  "pytest-cov>=6.2,<8",
+  "requests-mock>=1.12,<2",
+  "ruff>=0.12,<1",
+  "twine>=6.1,<7",
+  "types-requests>=2.32,<3",
 ]
 
 [project.urls]
 Homepage = "https://github.com/Hylouis233/bibverify"
+Documentation = "https://github.com/Hylouis233/bibverify#readme"
 Repository = "https://github.com/Hylouis233/bibverify"
 Issues = "https://github.com/Hylouis233/bibverify/issues"
+Changelog = "https://github.com/Hylouis233/bibverify/releases"
 
 [project.scripts]
 bibverify = "bibverify.cli:main"
 
 [tool.setuptools]
+package-dir = {"" = "src"}
 py-modules = ["bib_check"]
-packages = ["bibverify"]
+
+[tool.setuptools.dynamic]
+version = {attr = "bibverify._version.__version__"}
+
+[tool.setuptools.package-data]
+"bibverify.data" = ["*.json"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+addopts = "--strict-config --strict-markers"
+testpaths = ["tests"]
+markers = ["live: scheduled network contract tests, skipped during normal CI"]
+
+[tool.coverage.run]
+branch = true
+source = ["src/bibverify"]
+
+[tool.coverage.report]
+fail_under = 60
+show_missing = true
+skip_covered = true
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "RUF"]
+ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
+"src/bibverify/bibtex.py" = ["RUF019"]
+"src/bibverify/i18n.py" = ["RUF001"]
+"src/bibverify/provider_queries.py" = ["RUF019"]
+
+[tool.ruff.format]
+line-ending = "auto"
+quote-style = "double"
+
+[tool.mypy]
+python_version = "3.11"
+files = [
+  "src/bibverify/__init__.py",
+  "src/bibverify/config.py",
+  "src/bibverify/http.py",
+  "src/bibverify/i18n.py",
+  "src/bibverify/models.py",
+  "src/bibverify/identifiers.py",
+  "src/bibverify/matching.py",
+  "src/bibverify/merge.py",
+  "src/bibverify/cli.py",
+  "src/bibverify/mcp_server.py",
+]
+strict = true
+warn_unused_ignores = true
+
+[[tool.mypy.overrides]]
+module = ["bibtexparser.*", "scholarly.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["bibverify.cli", "bibverify.mcp_server"]
+disallow_untyped_calls = false
+
+[[tool.mypy.overrides]]
+module = [
+  "bibverify.agent",
+  "bibverify.bibtex",
+  "bibverify.checker",
+  "bibverify.provider_queries",
+  "bibverify.providers.*",
+  "bibverify.workflow",
+]
+check_untyped_defs = true
+disallow_untyped_defs = false
+disallow_untyped_calls = false

@@ -74,6 +74,21 @@ class BibTeXCheckerRankingTests(unittest.TestCase):
 
         self.assertEqual(order[:5], ["crossref", "arxiv", "pubmed", "europe_pmc", "dblp"])
 
+    def test_arxiv_url_hint_requires_the_real_arxiv_domain(self):
+        checker = self.make_checker()
+
+        self.assertTrue(checker._has_arxiv_identifier({"url": "https://arxiv.org/abs/2401.12345"}))
+        self.assertTrue(
+            checker._has_arxiv_identifier({"url": "https://export.arxiv.org/abs/2401.12345"})
+        )
+        self.assertTrue(checker._has_arxiv_identifier({"url": "arxiv.org/abs/2401.12345"}))
+        self.assertFalse(
+            checker._has_arxiv_identifier({"url": "https://arxiv.org.example.com/abs/2401.12345"})
+        )
+        self.assertFalse(
+            checker._has_arxiv_identifier({"url": "https://example.com/?next=https://arxiv.org"})
+        )
+
     def test_unpaywall_is_skipped_as_enrichment_only(self):
         checker = self.make_checker()
         checker.enabled_platforms = ["unpaywall", "crossref"]
@@ -111,6 +126,17 @@ class BibTeXCheckerRankingTests(unittest.TestCase):
         self.assertIn("title = {{A Mixed Case Title}}", bibtex)
         self.assertNotIn("{{{A Mixed Case Title}}}", bibtex)
 
+    def test_title_match_rejects_short_incidental_substrings(self):
+        checker = self.make_checker()
+
+        self.assertFalse(checker.is_title_match("AI", "A survey of explainable AI systems"))
+        self.assertTrue(
+            checker.is_title_match(
+                "Detecting Influenza Epidemics using Search Engine Query Data",
+                "Detecting influenza epidemics using search-engine query data",
+            )
+        )
+
     def test_output_files_use_input_bib_stem(self):
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
@@ -142,7 +168,9 @@ class BibTeXCheckerRankingTests(unittest.TestCase):
 
             self.assertTrue((tmp_path / "my_refs_backup_fixed.bib").exists())
             self.assertFalse((tmp_path / "sample_backup_fixed.bib").exists())
-            self.assertEqual(checker.last_output_files["backup"], "my_refs_backup_fixed.bib")
+            self.assertEqual(
+                Path(checker.last_output_files["backup"]).name, "my_refs_backup_fixed.bib"
+            )
 
 
 if __name__ == "__main__":

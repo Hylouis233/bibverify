@@ -1,0 +1,17 @@
+{
+  "resultList": {
+    "result": [
+      {
+        "id": "12345678",
+        "source": "MED",
+        "title": "Reliable Bibliographic Verification",
+        "authorString": "Lovelace A",
+        "pubYear": "2026",
+        "journalTitle": "Journal of Metadata",
+        "doi": "10.1000/reliable",
+        "pmid": "12345678",
+        "pmcid": "PMC123"
+      }
+    ]
+  }
+}

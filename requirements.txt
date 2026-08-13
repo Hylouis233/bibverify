@@ -1,2 +1,7 @@
-bibtexparser>=1.4.0
-requests>=2.28.0
+# Compatibility file for users who do not install the package itself.
+# Prefer: python -m pip install -e .
+bibtexparser>=1.4.3,<2
+mcp>=2.0,<3
+requests>=2.32,<3
+rich>=13.9,<15
+typer>=0.16,<1

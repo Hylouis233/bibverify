@@ -1,0 +1,50 @@
+[
+  {
+    "id": "exact_metadata",
+    "expected": "matched",
+    "original": {"title": "Reliable Bibliographic Verification", "author": "Ada Lovelace", "year": "2026"},
+    "candidate": {"title": "Reliable Bibliographic Verification", "author": "Ada Lovelace", "year": "2026"}
+  },
+  {
+    "id": "punctuation_variant",
+    "expected": "matched",
+    "original": {"title": "Detecting influenza epidemics using search-engine query data", "author": "Ginsberg, Jeremy", "year": "2009"},
+    "candidate": {"title": "Detecting Influenza Epidemics Using Search Engine Query Data", "author": "Jeremy Ginsberg", "year": "2009"}
+  },
+  {
+    "id": "short_title_false_positive",
+    "expected": "no_match",
+    "original": {"title": "AI", "year": "2025"},
+    "candidate": {"title": "A survey of explainable AI systems", "year": "2025"}
+  },
+  {
+    "id": "doi_points_to_other_title",
+    "expected": "identifier_conflict",
+    "original": {"title": "A study of influenza", "doi": "10.1000/example"},
+    "candidate": {"title": "Quantum gravity in black holes", "doi": "10.1000/example"}
+  },
+  {
+    "id": "same_title_conflicting_doi",
+    "expected": "identifier_conflict",
+    "original": {"title": "Shared title", "doi": "10.1000/one"},
+    "candidate": {"title": "Shared title", "doi": "10.1000/two"}
+  },
+  {
+    "id": "preprint_title_variant",
+    "expected": "ambiguous",
+    "original": {"title": "Learning robust representations for clinical genomics", "author": "Smith, Alex", "year": "2024"},
+    "candidate": {"title": "Robust representation learning in clinical genomics", "author": "Alex Smith", "year": "2025"}
+  },
+  {
+    "id": "unicode_latex_variant",
+    "expected": "matched",
+    "original": {"title": "{\\beta}-Amyloid aggregation in café cohorts", "author": "Müller, Ana", "year": "2023"},
+    "candidate": {"title": "Beta Amyloid aggregation in café cohorts", "author": "Ana Müller", "year": "2023"}
+  },
+  {
+    "id": "fabricated_combination",
+    "expected": "no_match",
+    "original": {"title": "Reliable Bibliographic Verification", "author": "Imaginary Person", "year": "1998"},
+    "candidate": {"title": "Reliable Bibliographic Verification", "author": "Ada Lovelace", "year": "2026"}
+  }
+]

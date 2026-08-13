@@ -1,0 +1,30 @@
+name: Provider contract smoke tests
+
+on:
+  schedule:
+    - cron: "17 3 * * 2"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  live-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.14"
+          cache: pip
+      - run: python -m pip install -e ".[dev]"
+      - name: Verify stable public identifiers
+        env:
+          BIBVERIFY_EMAIL: contract-test@example.com
+          BIBVERIFY_LIVE_TESTS: "1"
+        run: python -m pytest tests/test_live_contract.py -m live --junitxml=provider-contract.xml
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        if: always()
+        with:
+          name: provider-contract-results
+          path: provider-contract.xml

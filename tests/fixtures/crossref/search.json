@@ -1,0 +1,15 @@
+{
+  "status": "ok",
+  "message": {
+    "items": [
+      {
+        "type": "journal-article",
+        "title": ["Reliable Bibliographic Verification"],
+        "author": [{"given": "Ada", "family": "Lovelace"}],
+        "published": {"date-parts": [[2026]]},
+        "container-title": ["Journal of Metadata"],
+        "DOI": "10.1000/reliable"
+      }
+    ]
+  }
+}

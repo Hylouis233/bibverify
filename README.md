@@ -1,240 +1,268 @@
-# Bibverify - BibTeX 文献检查工具
+# Bibverify
 
 <!-- mcp-name: io.github.Hylouis233/bibverify -->
 
 <p align="center">
-<a href="README_EN.md"><img src="https://img.shields.io/badge/English-README-blue.svg" alt="English README"></a> | <a href="README.md"><img src="https://img.shields.io/badge/中文-README-red.svg" alt="中文 README"></a>
+  <strong>核验书目记录存在性与元数据一致性，安全整理 BibTeX。</strong>
 </p>
 
-> **中文**: 一个支持多平台的 BibTeX 文献验证和更新工具，通过 DOI 精确查询、动态检索排序和多个学术数据库 API 自动检查、补全和解释文献信息。
->
-> **English**: A multi-platform BibTeX reference verification and update tool with DOI-first lookup, dynamic source ranking, MCP tools, and skill export for AI assistants.
+<p align="center">
+  <a href="README_EN.md">English</a> · <a href="#快速开始">快速开始</a> · <a href="#mcp-与-ai-助手">MCP</a> · <a href="#参与开发">参与开发</a>
+</p>
 
-[![PyPI](https://img.shields.io/pypi/v/bibverify.svg)](https://pypi.org/project/bibverify/) [![Release](https://img.shields.io/github/v/release/Hylouis233/bibverify)](https://github.com/Hylouis233/bibverify/releases) [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE) [![Python](https://img.shields.io/badge/python-3.7+-green.svg)](https://www.python.org/) [![Stars](https://img.shields.io/github/stars/Hylouis233/bibverify?style=social)](https://github.com/Hylouis233/bibverify) [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.17338090.svg)](https://doi.org/10.5281/zenodo.17338090)
+<p align="center">
+  <a href="https://pypi.org/project/bibverify/"><img src="https://img.shields.io/pypi/v/bibverify.svg" alt="PyPI"></a>
+  <a href="https://pypi.org/project/bibverify/"><img src="https://img.shields.io/pypi/pyversions/bibverify.svg" alt="Python versions"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT License"></a>
+  <a href="https://github.com/Hylouis233/bibverify/actions/workflows/ci.yml"><img src="https://github.com/Hylouis233/bibverify/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+</p>
+
+Bibverify 是一个面向研究者、编辑、自动化流程和 AI 助手的 BibTeX 元数据核验工具。它优先使用 DOI、PMID、PMCID 或 arXiv ID 精确定位记录，再结合标题、作者、年份、期刊与页码等信号评估候选项。
+
+Bibverify 判断的是“已查询数据源中的书目记录与元数据是否一致”，而不是论文结论是否真实、数据是否造假或期刊是否可信。数据库未收录也不等于文献虚构；这类结果会明确标为“未在已查询数据源中检索到”或“需要人工复核”。默认运行不会改写原始 `.bib` 文件。
+
+## 主要能力
+
+- 标识符优先：DOI、PMID、PMCID 和 arXiv ID 会走相应平台的精确接口。
+- 多数据源：支持 Crossref、OpenAlex、Semantic Scholar、PubMed、Europe PMC、CORE、DBLP、arXiv、bioRxiv 等。
+- 可解释匹配：综合标识符、标题、作者、年份、期刊和页码；DOI 指向不同标题时标记为 `identifier_conflict`，不会用标题搜索掩盖冲突。
+- 结构化状态：区分正常无结果、歧义、限流、鉴权失败、网络错误和解析错误；数据源故障不会落入 `not_found`。
+- 非破坏性更新：API 未返回的 `abstract`、`keywords`、`file`、`note` 及自定义字段不会删除；不同持久标识符绝不自动覆盖。
+- 稳健网络层：复用连接，对 `429/5xx` 自动重试和指数退避，并尊重 `Retry-After`。
+- 本地缓存：成功的 GET 响应可写入有过期时间的 SQLite 缓存；失败响应不会缓存。
+- 跨平台文件处理：支持 Windows、macOS 和 Linux；正确处理空格、中文路径、UTF-8 BOM 与 CRLF。
+- 适合自动化：提供 JSON 输出、稳定退出码、Python API 和基于官方 SDK 的 MCP 服务。
+- 安全输出：使用原子写入；备份保留原始字节与换行，不会悄悄改写源文件。
+
+## 系统要求
+
+- Python 3.11–3.14
+- Windows、macOS 或 Linux
+- 访问学术元数据 API 的网络连接
+
+项目的 GitHub Actions 会在三种操作系统和四个 Python 版本上运行测试。
 
 ## 快速开始
 
 ### 安装
 
-```bash
-pip install -U bibverify
-```
-
-### DOI 转 BibTeX
+命令行工具推荐使用 `pipx` 或 `uv tool`，它们会创建独立环境：
 
 ```bash
-bibverify --doi 10.1038/nature12373 --key example2013
+pipx install bibverify
 ```
-
-### 检查一个 `.bib` 文件
-
-创建 `config.json`：
-
-```json
-{
-  "language": "CN",
-  "bib_file": "references.bib",
-  "user_info": {
-    "email": "your_email@example.com",
-    "app_name": "Bibverify"
-  }
-}
-```
-
-然后运行：
 
 ```bash
-bibverify config.json
+uv tool install bibverify
 ```
 
-### 一键生成大模型接入文件
+也可以在虚拟环境中安装：
 
 ```bash
-bibverify agent init --target codex --output .bibverify-agent --config config.json
-bibverify agent doctor --config config.json
+python -m pip install --upgrade bibverify
 ```
 
-生成的 `.bibverify-agent/` 目录包含 MCP 配置片段、`SKILL.md` 和本地接入说明。
+每个版本还会在 GitHub Releases 提供由对应系统原生构建并冒烟测试的 Windows、macOS 和 Linux 独立程序包。
 
-## 核心能力
-
-- DOI 优先：有 DOI 的条目优先走 Crossref 精确查询，再回退到标题检索。
-- 动态排序：根据 DOI、PMID/PMCID、arXiv、学科线索动态提升 Crossref、PubMed、Europe PMC、arXiv、DBLP。
-- 多平台校验：支持 Crossref、OpenAlex、Semantic Scholar、PubMed、Europe PMC、CORE、DBLP、arXiv、bioRxiv 等平台。
-- AI 接入：内置 MCP stdio server，可导出 skill，让 Codex、Claude、Cursor 等支持 MCP 的助手调用 Bibverify。
-- 安全输出：不会原地覆盖源 `.bib` 文件，而是生成备份、更新条目和问题条目文件。
-
-## 🚀 支持的学术平台
-
-| 平台 | 优先级 | 学科覆盖 | API要求 | 特殊功能 |
-|------|--------|----------|---------|----------|
-| **CrossRef** | 1 | 全学科 | 无需API | Polite Pool |
-| **OpenAlex** | 2 | 全学科 | 建议/需要 API key | 引用关系 |
-| **Semantic Scholar** | 3 | 全学科 | 推荐API | AI 驱动 |
-| **PubMed** | 4 | 生物医学 | 可选API | 医学专业 |
-| **Europe PMC** | 5 | 生物医学 | 无需API | 欧洲医学 |
-| **CORE** | 6 | 开放获取 | 推荐API | 开放论文 |
-| **Unpaywall** | 后处理 | 全学科 | 需要邮箱 | 开放版本补充，不作为主元数据源 |
-| **DBLP** | 8 | 计算机科学 | 无需API | CS 专业 |
-| **arXiv** | 9 | 预印本 | 无需API | 预印本 |
-| **bioRxiv** | 10 | 生物医学预印本 | 无需API | 生物预印本 |
-
-## 📦 安装
-
-### 从 PyPI 安装
+### 由 DOI 生成 BibTeX
 
 ```bash
-pip install -U bibverify
+bibverify doi 10.1038/nature12373 --key example2013
 ```
 
-### 从源码开发/运行
+机器可读输出：
 
 ```bash
-git clone https://github.com/Hylouis233/bibverify.git
-cd bibverify
-pip install -e .
+bibverify doi 10.1038/nature12373 --json
 ```
 
-如果只需要安装运行依赖：
+### 验证 `.bib` 文件
+
+先创建配置：
 
 ```bash
-pip install -r requirements.txt
+bibverify config init
 ```
 
-当前发布版本：
-
-- PyPI: https://pypi.org/project/bibverify/
-- GitHub Releases: https://github.com/Hylouis233/bibverify/releases
-- MCP Registry: `io.github.Hylouis233/bibverify`
-- ClawHub/OpenClaw skill: `bibverify`
-
-## ⚙️ 配置设置
-
-### 1. 创建配置文件
-
-从 PyPI 安装后，可以手动创建一个最小 `config.json`：
-
-```json
-{
-  "language": "CN",
-  "bib_file": "references.bib",
-  "user_info": {
-    "email": "your_email@example.com",
-    "app_name": "Bibverify"
-  }
-}
-```
-
-如果你在源码仓库中使用，也可以复制模板后再编辑：
+将 `references.bib` 放在配置文件旁边，然后运行：
 
 ```bash
-cp config_template.json config.json
+bibverify check --config config.json
 ```
 
-### 2. 基本配置
+也可以直接覆盖输入文件和输出目录：
 
-编辑 `config.json` 文件：
-
-```json
-{
-  "language": "CN",
-  "bib_file": "references.bib",
-  "user_info": {
-    "email": "your_email@example.com",
-    "app_name": "Bibverify"
-  }
-}
+```bash
+bibverify check references.bib --config config.json --output-dir bibverify-output
 ```
 
-### 3. 平台配置
+仅查看核验结果、不写任何文件：
 
-根据需要启用/禁用平台：
-
-```json
-{
-  "platforms": {
-    "crossref": {
-      "enabled": true,
-      "priority": 1,
-      "use_polite_pool": true
-    },
-    "semantic_scholar": {
-      "enabled": true,
-      "priority": 3,
-      "requires_api_key": true,
-      "api_key": "your_api_key_here"
-    }
-  }
-}
+```bash
+bibverify check references.bib --dry-run --json
 ```
 
-### 4. 语言设置
+确认报告后，可显式应用高置信度字段更新；Bibverify 会先做逐字节备份：
 
-- `"CN"`: 中文界面
-- `"EN"`: 英文界面
+```bash
+bibverify check references.bib --apply
+```
 
-## 🎯 使用方法
+PowerShell 示例：
 
-### 命令速查
+```powershell
+py -m bibverify check '.\文献\references.bib' --output-dir '.\验证结果'
+```
 
-| 命令 | 用途 |
-|------|------|
-| `bibverify config.json` | 按配置检查 `.bib` 文件 |
-| `bibverify --doi DOI --key KEY` | 通过 DOI 生成单条 BibTeX |
-| `bibverify mcp --config config.json` | 启动 MCP stdio server |
-| `bibverify agent init --target codex` | 生成 MCP/Skill 接入文件 |
-| `bibverify agent doctor --config config.json` | 检查本地集成是否可用 |
-| `bibverify skill export --target codex` | 单独导出 `SKILL.md` |
-
-### 检查 `.bib` 文件
+旧版调用方式仍然可用，但新脚本建议使用子命令：
 
 ```bash
 bibverify config.json
-```
-
-### 通过 DOI 生成单条 BibTeX
-
-```bash
 bibverify --doi 10.1038/nature12373 --key example2013
 ```
 
-该模式会直接调用 Crossref DOI 精确查询，并将结果打印为 BibTeX。
+## 配置
 
-### 一键接入大模型 / MCP / Skill
+最小配置如下：
 
-为小白用户准备本地集成文件：
-
-```bash
-bibverify agent init --target codex --output .bibverify-agent --config config.json
+```json
+{
+  "language": "CN",
+  "bib_file": "references.bib",
+  "encoding": "auto",
+  "output_dir": "bibverify-output",
+  "user_info": {
+    "email": "your_email@example.com",
+    "app_name": "Bibverify"
+  }
+}
 ```
 
-生成内容：
+完整示例见 [`config_template.json`](config_template.json)。
 
-- `.bibverify-agent/SKILL.md`: 给大模型看的 Bibverify 调用说明
-- `.bibverify-agent/mcp.json`: MCP server 配置片段
-- `.bibverify-agent/README.md`: 本地接入说明
+需要注意的路径规则：
 
-启动 MCP stdio server：
+- `bib_file` 和 `output_dir` 的相对路径均相对于 `config.json` 所在目录，而不是当前终端目录。
+- 没有设置 `output_dir` 时，输出写到输入 `.bib` 文件旁边。
+- `encoding: "auto"` 依次尝试 UTF-8 BOM、UTF-8 和 GB18030，不再用 Latin-1 掩盖未知编码。
 
-```bash
-bibverify mcp --config config.json
+### API 密钥与邮箱
+
+密钥可以写入本地配置，但更推荐环境变量；这样不会误提交到 Git：
+
+| 环境变量 | 用途 |
+|---|---|
+| `BIBVERIFY_EMAIL` | Crossref polite pool 和联系信息 |
+| `BIBVERIFY_OPENALEX_API_KEY` | OpenAlex |
+| `BIBVERIFY_SEMANTIC_SCHOLAR_API_KEY` | Semantic Scholar |
+| `BIBVERIFY_PUBMED_API_KEY` | PubMed/NCBI |
+| `BIBVERIFY_CORE_API_KEY` | CORE |
+
+PowerShell：
+
+```powershell
+$env:BIBVERIFY_EMAIL = 'you@example.com'
+$env:BIBVERIFY_OPENALEX_API_KEY = '...'
+bibverify check --config config.json
 ```
 
-单独导出 skill：
+Bash/Zsh：
 
 ```bash
-bibverify skill export --target codex --output .bibverify-agent/SKILL.md
+export BIBVERIFY_EMAIL='you@example.com'
+export BIBVERIFY_OPENALEX_API_KEY='...'
+bibverify check --config config.json
 ```
 
-检查本地环境：
+### 查询与匹配设置
+
+```json
+{
+  "query_settings": {
+    "delay_between_requests": 0.5,
+    "timeout": 10,
+    "connect_timeout": 3.05,
+    "read_timeout": 20,
+    "max_retries": 3,
+    "backoff_factor": 0.5,
+    "stop_on_first_match": true,
+    "match_threshold": 0.86,
+    "ambiguous_threshold": 0.68,
+    "auto_update_threshold": 0.92,
+    "cache_enabled": true,
+    "cache_ttl_hours": 168,
+    "cache_path": ".bibverify-cache.sqlite3"
+  }
+}
+```
+
+`connect_timeout` 和 `read_timeout` 分别限制连接与响应读取；兼容字段 `timeout` 仍保留。`match_threshold` 控制自动接受候选的最低分，`ambiguous_threshold` 控制进入人工复核的最低分，`auto_update_threshold` 进一步限制字段自动更新。阈值越高越保守。`cache_path` 的相对路径同样相对于配置文件目录。
+
+bioRxiv 官方 `details` 路由不支持任意标题搜索，因此 Bibverify 只在存在 `10.1101/...` DOI 时直接查询 bioRxiv；纯标题检索交给 Crossref、Europe PMC 等支持该契约的数据源。
+
+## 命令行参考
+
+```text
+bibverify check [BIB_FILE] [--config PATH] [--output-dir DIR] [--format txt|json|jsonl|csv] [--dry-run|--apply] [--json]
+bibverify doi DOI [--key KEY] [--config PATH] [--json]
+bibverify config init [--output PATH] [--force]
+bibverify doctor [--config PATH] [--json]
+bibverify providers list [--json]
+bibverify cache clear [--config PATH]
+bibverify benchmark [--dataset PATH]
+bibverify mcp [--config PATH] [--workspace-root DIR] [--transport stdio|streamable-http]
+bibverify agent init [--target generic|codex|claude|cursor]
+bibverify skill export [--target ...]
+```
+
+退出码：
+
+| 退出码 | 含义 |
+|---:|---|
+| `0` | 核验完成，元数据一致 |
+| `1` | 运行错误（保留给不可归类的命令失败） |
+| `2` | 存在元数据差异或高置信度更新建议 |
+| `3` | 存在歧义、未检索到或标识符冲突，需要人工复核 |
+| `4` | 数据源不可用，核验不完整 |
+| `5` | 输入文件、配置或条目无效 |
+
+使用 `--json` 时，stdout 只输出 JSON；诊断信息写入 stderr，适合 CI 和脚本解析。
+
+## 输出文件
+
+以 `references.bib` 为例：
+
+- `bibverify_report_<时间>.<格式>`：完整状态、候选、Provider 错误、置信度和字段级来源；支持 `txt`、`json`、`jsonl`、`csv`。
+- `references_backup_<时间>.bib`：原文件逐字节备份。
+- `references_updated_<时间>.bib`：非破坏性合并后的完整文献库；无更新时不生成。
+- `references_review_<时间>.bib`：歧义、未检索到、数据源不可用、标识符冲突或无效条目；无待复核项时不生成。
+
+报告顶层 `complete` 仅在所有条目均完成核验时为 `true`。Provider 限流或网络故障会令其为 `false`，即使其他来源找到了候选。`field_diffs` 会记录原值、建议值、来源、置信度、标准化等价性、动作和理由。
+
+可通过 `output_settings` 分别关闭报告、备份、更新文件或复核文件；`--dry-run` 会覆盖这些设置并保证零写入。默认只生成建议文件，只有 `--apply` 会在完成备份后修改源文件。
+
+## 数据源顺序
+
+静态优先级不是唯一依据：
+
+1. DOI 会提升 Crossref，并先走 DOI 精确接口；可解析但标题明显冲突时停止并报告 `identifier_conflict`。
+2. PMID/PMCID 或生物医学线索会提升 PubMed 与 Europe PMC。
+3. arXiv 标识会提升 arXiv。
+4. 计算机科学会议和期刊线索会提升 DBLP。
+
+Unpaywall 当前只作为开放获取信息补充，不作为主书目元数据源。Provider 结果会分别标为 `matched`、`no_match`、`ambiguous`、`rate_limited`、`auth_error`、`network_error`、`parse_error`、`provider_error` 或 `skipped`。
+
+## MCP 与 AI 助手
+
+Bibverify 使用官方 MCP Python SDK，可运行本地 stdio 或 Streamable HTTP 服务。
+
+stdio：
 
 ```bash
-bibverify agent doctor --config config.json
+bibverify mcp --config config.json --workspace-root .
 ```
 
-MCP 当前暴露四个工具：`doi_to_bibtex`、`rank_lookup_sources`、`explain_update_diff`、`verify_bib_file`。大模型接入 MCP 后，可以直接调用这些工具完成 DOI 转 BibTeX、检索源排序解释、条目差异解释和 `.bib` 文件检查。`verify_bib_file` 同时返回结构化的检查计数和生成文件名，便于 agent 继续处理。
-
-可复制的 MCP 配置片段：
+MCP 客户端配置：
 
 ```json
 {
@@ -247,197 +275,80 @@ MCP 当前暴露四个工具：`doi_to_bibtex`、`rank_lookup_sources`、`explai
 }
 ```
 
-已发布入口：
+Streamable HTTP：
 
-- MCP Registry 名称：`io.github.Hylouis233/bibverify`
-- ClawHub/OpenClaw skill slug：`bibverify`
-
-## 📁 输出文件
-
-程序会生成以下文件，不会原地覆盖你的源文件。`.bib` 输出文件使用输入文件名 stem 作为前缀，例如 `references.bib` 会生成 `references_backup_*`、`references_updated_*` 和 `references_wrong_*`：
-
-1. **检查报告** (`bib_check_report_YYYYMMDD_HHMMSS.txt`)
-   - 验证通过的文献列表
-   - 需要更新的文献及其差异详情
-   - 未找到的文献列表
-
-2. **备份文件** (`references_backup_YYYYMMDD_HHMMSS.bib`)
-   - 原始 BibTeX 文件的完整备份
-
-3. **更新文件** (`references_updated_YYYYMMDD_HHMMSS.bib`)
-   - 包含所有更新后的文献条目
-
-4. **问题文件** (`references_wrong_YYYYMMDD_HHMMSS.bib`)
-   - 包含未找到或处理错误的文献
-
-## 🔄 工作流程
-
-```
-开始
- ↓
-加载 BibTeX 文件
- ↓
-对每个条目：
- ├─ 提取标题
- ├─ 根据 DOI/PMID/arXiv 等标识符动态调整平台顺序
- ├─ 按调整后的优先级查询各平台
- ├─ 智能匹配文献信息
- ├─ 保持原有键值
- ├─ 比对字段差异
- └─ 记录结果
- ↓
-生成检查报告
- ↓
-生成更新文件
- ↓
-完成
+```bash
+bibverify mcp --transport streamable-http --config config.json
 ```
 
-## 📝 BibTeX 格式标准
+MCP 默认将配置文件所在目录视为工作区根目录，并拒绝读取该目录之外的配置或 `.bib` 文件，也拒绝向工作区之外写报告、缓存和更新文件。需要更大的范围时必须在启动服务器时显式传入 `--workspace-root`。协议协商、Schema、结构化结果、进度和取消由官方 MCP SDK 处理。
 
-### 字段顺序
+提供的工具：
 
-程序生成的 BibTeX 文件遵循标准字段顺序：
+- `doi_to_bibtex`
+- `rank_lookup_sources`
+- `explain_update_diff`
+- `verify_bib_file`
 
-```bibtex
-@article{key,
-  title={...},
-  author={...},
-  journal={...},
-  volume={...},
-  number={...},
-  pages={...},
-  year={...},
-  publisher={...},
-  doi={...}
-}
+生成适配 Codex、Claude、Cursor 或通用 MCP 客户端的说明文件：
+
+```bash
+bibverify agent init --target codex --output .bibverify-agent --config config.json
+bibverify doctor --config config.json
 ```
 
-### 文献类型映射
+## Python API
 
-| 平台类型 | BibTeX 类型 |
-|----------|------------|
-| journal-article | article |
-| book-chapter | incollection |
-| book | book |
-| proceedings-article | inproceedings |
-| posted-content | unpublished |
+```python
+from bibverify.checker import BibTeXChecker
 
-## 🎯 智能匹配规则
-
-### 标题匹配策略
-
-1. **完全相同**（忽略大小写、标点符号）
-2. **原标题包含在新标题中**
-3. **严格不匹配**：避免误匹配
-
-### 标题规范化过程
-
-```
-"{{Detecting Influenza Epidemics}}"
-↓ 移除大括号
-"Detecting Influenza Epidemics"
-↓ 转小写
-"detecting influenza epidemics"
-↓ 移除标点符号
-"detecting influenza epidemics"
-↓ 规范化空格
-"detecting influenza epidemics"
+checker = BibTeXChecker("config.json")
+summary = checker.run()
+print(summary["counts"])
 ```
 
-## 🔧 高级配置
+`from bib_check import BibTeXChecker` 会在 0.3 系列继续兼容，但新代码应使用包内导入路径。
 
-### API 设置
+## 参与开发
 
-部分平台需要 API key 以获得更高访问速度或稳定访问：
-
-#### OpenAlex
-```json
-"openalex": {
-  "api_key": "your_api_key_here"
-}
-```
-注册地址: https://docs.openalex.org/how-to-use-the-api/getting-started/authentication
-
-#### Semantic Scholar
-```json
-"semantic_scholar": {
-  "api_key": "your_api_key_here"
-}
-```
-注册地址: https://www.semanticscholar.org/product/api#api-key-form
-
-#### PubMed
-```json
-"pubmed": {
-  "api_key": "your_api_key_here"
-}
-```
-注册地址: https://www.ncbi.nlm.nih.gov/account/
-
-#### CORE
-```json
-"core": {
-  "api_key": "your_api_key_here"
-}
-```
-注册地址: https://core.ac.uk/services/api
-
-### Polite Pool 设置
-
-为获得更高访问速度，建议设置邮箱：
-
-```json
-"user_info": {
-  "email": "your_email@example.com"
-}
+```bash
+git clone https://github.com/Hylouis233/bibverify.git
+cd bibverify
+python -m venv .venv
 ```
 
-### 查询设置
+激活环境后安装开发依赖：
 
-```json
-"query_settings": {
-  "delay_between_requests": 0.5,
-  "timeout": 10,
-  "max_retries": 3,
-  "stop_on_first_match": true
-}
+```bash
+python -m pip install -e ".[dev]"
+python -m pytest
+python -m ruff check src tests bib_check.py
+python -m ruff format --check src tests bib_check.py
+python -m mypy
+python -m build
+python -m twine check dist/*
+python -m bibverify benchmark --dataset benchmarks/cases.json
+python -m pip_audit . --strict
 ```
 
-检索顺序不是单纯静态表格顺序：如果条目已有 DOI，会优先走 Crossref DOI 精确查询；如果有 PMID/PMCID，会提升 PubMed 和 Europe PMC；如果有 arXiv 标识，会提升 arXiv。Unpaywall 当前只适合作为开放获取链接补充，不作为主文献元数据源。
+CI 会在 Windows、macOS、Linux 和 Python 3.11–3.14 上运行测试，并执行 fixture/golden 测试、lint、类型检查、覆盖率、离线 benchmark、依赖漏洞审计、包构建与 CycloneDX SBOM 生成。GitHub Actions 固定到提交 SHA；MCP Publisher 固定版本并校验 SHA-256。PyPI 发布使用 Trusted Publishing 与默认的数字证明，不在仓库中保存上传令牌。
 
-## 📊 项目统计
+`benchmarks/cases.json` 是用于防止匹配策略回归的最小离线标注集，覆盖短标题误匹配、DOI 冲突、预印本标题变体、Unicode/LaTeX 和虚构作者组合。它不是完整科研评测，也不能代表真实世界的最终精确率；欢迎提交更广泛、可再分发的人工标注案例。
 
-![GitHub stars](https://img.shields.io/github/stars/Hylouis233/bibverify?style=social) ![GitHub forks](https://img.shields.io/github/forks/Hylouis233/bibverify?style=social) ![GitHub issues](https://img.shields.io/github/issues/Hylouis233/bibverify) ![GitHub pull requests](https://img.shields.io/github/issues-pr/Hylouis233/bibverify)
+## 引用
 
-[![Star History Chart](https://api.star-history.com/svg?repos=Hylouis233/bibverify&type=Date)](https://www.star-history.com/#Hylouis233/bibverify&Date)
+如果 Bibverify 对你的研究有帮助，请引用：
 
-## 📖 学术引用
-
-如果您在学术研究或项目中使用 Bibverify，请您引用本项目：
-
-### BibTeX 格式
 ```bibtex
 @software{bibverify2025,
-  title={Bibverify: A Multi-Platform BibTeX Reference Verification Tool},
-  author={Hong Liu},
-  year={2025},
-  url={https://github.com/Hylouis233/bibverify},
-  note={DOI: 10.5281/zenodo.17338090}
+  title = {Bibverify: A Multi-Platform BibTeX Reference Verification Tool},
+  author = {Hong Liu},
+  year = {2025},
+  url = {https://github.com/Hylouis233/bibverify},
+  doi = {10.5281/zenodo.17338090}
 }
 ```
 
-### 文本格式
-```
-Hong Liu. (2025). Bibverify: A Multi-Platform BibTeX Reference Verification Tool. 
-GitHub. https://github.com/Hylouis233/bibverify. DOI: 10.5281/zenodo.17338090
-```
+## 许可证
 
-**Bibverify** - 让文献管理更简单、更准确！
-
-⭐ **如果这个工具对您有帮助，请给个 Star！**
-
-
-## 🤝 贡献
-
-欢迎提交 [GitHub Issues](https://github.com/Hylouis233/bibverify/issues) 和 [Pull Request](https://github.com/Hylouis233/bibverify/pulls)！
+[MIT License](LICENSE)

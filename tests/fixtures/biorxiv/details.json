@@ -1,0 +1,14 @@
+{
+  "messages": [{"status": "ok", "count": 1}],
+  "collection": [
+    {
+      "doi": "10.1101/2026.01.01.123456",
+      "title": "Reliable Bibliographic Verification",
+      "authors": "Ada Lovelace; Alan Turing",
+      "date": "2026-01-01",
+      "version": "1",
+      "category": "scientific communication",
+      "server": "biorxiv"
+    }
+  ]
+}

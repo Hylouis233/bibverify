@@ -12,8 +12,11 @@ config.json
 # Distribution / packaging
 .Python
 build/
+build/pyinstaller/
 develop-eggs/
 dist/
+dist-standalone/
+release/
 downloads/
 eggs/
 .eggs/
@@ -63,6 +66,9 @@ cover/
 local_settings.py
 db.sqlite3
 db.sqlite3-journal
+.bibverify-cache.sqlite3
+.bibverify-cache.sqlite3-shm
+.bibverify-cache.sqlite3-wal
 
 # Flask stuff:
 instance/
@@ -193,6 +199,10 @@ cython_debug/
 
 # Ruff stuff:
 .ruff_cache/
+
+# Local type-checker and build smoke environments
+.venv-wheel-smoke/
+.venv-standalone/
 
 # PyPI configuration file
 .pypirc

@@ -1,2 +1,8 @@
 include server.json
+include README_EN.md
+include config_template.json
 recursive-include clawhub *.md
+recursive-include benchmarks *.json
+recursive-include tests/fixtures *.json *.xml
+include tools/sync_release_metadata.py
+include tools/validate_project.py
