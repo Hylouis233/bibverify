@@ -52,16 +52,16 @@ jobs:
 
       - name: Publish server metadata
         run: |
-          for attempt in 1 2 3 4 5 6; do
+          for attempt in {1..60}; do
             if ./mcp-publisher publish; then
               exit 0
             fi
 
-            if [ "$attempt" -eq 6 ]; then
+            if [ "$attempt" -eq 60 ]; then
               echo "MCP Registry publication failed after ${attempt} attempts."
               exit 1
             fi
 
-            echo "Registry dependencies may still be propagating; retrying in 30 seconds (${attempt}/6)."
+            echo "Registry dependencies may still be propagating; retrying in 30 seconds (${attempt}/60)."
             sleep 30
           done

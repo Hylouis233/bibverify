@@ -3,7 +3,7 @@
   "name": "io.github.Hylouis233/bibverify",
   "title": "Bibverify",
   "description": "Verify and repair BibTeX references with DOI-first MCP tools.",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "repository": {
     "url": "https://github.com/Hylouis233/bibverify",
     "source": "github"
@@ -13,7 +13,7 @@
     {
       "registryType": "pypi",
       "identifier": "bibverify",
-      "version": "0.3.0",
+      "version": "0.4.0",
       "transport": {
         "type": "stdio"
       },
@@ -23,6 +23,27 @@
           "value": "mcp"
         }
       ]
+    },
+    {
+      "registryType": "npm",
+      "identifier": "@hylouis233/bibverify",
+      "version": "0.4.0",
+      "transport": {
+        "type": "stdio"
+      },
+      "packageArguments": [
+        {
+          "type": "positional",
+          "value": "mcp"
+        }
+      ]
+    },
+    {
+      "registryType": "oci",
+      "identifier": "ghcr.io/hylouis233/bibverify:0.4.0",
+      "transport": {
+        "type": "stdio"
+      }
     }
   ]
 }
