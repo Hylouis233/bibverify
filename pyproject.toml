@@ -35,7 +35,7 @@ google-scholar = ["scholarly>=1.7,<2"]
 dev = [
   "build>=1.3,<2",
   "cyclonedx-bom>=7.1,<8",
-  "mypy>=1.17,<2",
+  "mypy>=1.17,<3",
   "pip-audit>=2.10.1,<3",
   "pyinstaller>=6.16,<7",
   "PyYAML>=6.0.2,<7",
