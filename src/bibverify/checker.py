@@ -8,6 +8,7 @@ import re
 from copy import deepcopy
 from difflib import SequenceMatcher
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import bibtexparser
 from bibtexparser.bparser import BibTexParser
@@ -121,10 +122,20 @@ class BibTeXChecker(ProviderQueriesMixin, BibTeXMixin, WorkflowMixin):
         doi = self.canonicalize_doi(entry.get("doi", ""))
         return (
             archive_prefix == "arxiv"
-            or "arxiv.org" in url.lower()
+            or self._is_arxiv_url(url)
             or bool(re.match(r"^\d{4}\.\d{4,5}(v\d+)?$", eprint))
             or doi.lower().startswith("10.48550/arxiv.")
         )
+
+    @staticmethod
+    def _is_arxiv_url(value):
+        raw_url = str(value).strip()
+        if not raw_url:
+            return False
+
+        parsed = urlsplit(raw_url if "://" in raw_url or raw_url.startswith("//") else f"//{raw_url}")
+        hostname = (parsed.hostname or "").lower().rstrip(".")
+        return hostname == "arxiv.org" or hostname.endswith(".arxiv.org")
 
     def _looks_biomedical(self, entry, title):
         if not entry:

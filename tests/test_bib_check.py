@@ -74,6 +74,21 @@ class BibTeXCheckerRankingTests(unittest.TestCase):
 
         self.assertEqual(order[:5], ["crossref", "arxiv", "pubmed", "europe_pmc", "dblp"])
 
+    def test_arxiv_url_hint_requires_the_real_arxiv_domain(self):
+        checker = self.make_checker()
+
+        self.assertTrue(checker._has_arxiv_identifier({"url": "https://arxiv.org/abs/2401.12345"}))
+        self.assertTrue(
+            checker._has_arxiv_identifier({"url": "https://export.arxiv.org/abs/2401.12345"})
+        )
+        self.assertTrue(checker._has_arxiv_identifier({"url": "arxiv.org/abs/2401.12345"}))
+        self.assertFalse(
+            checker._has_arxiv_identifier({"url": "https://arxiv.org.example.com/abs/2401.12345"})
+        )
+        self.assertFalse(
+            checker._has_arxiv_identifier({"url": "https://example.com/?next=https://arxiv.org"})
+        )
+
     def test_unpaywall_is_skipped_as_enrichment_only(self):
         checker = self.make_checker()
         checker.enabled_platforms = ["unpaywall", "crossref"]
