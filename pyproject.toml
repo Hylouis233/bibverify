@@ -27,7 +27,7 @@ dependencies = [
   "mcp>=2.0,<3",
   "requests>=2.34.2,<3",
   "rich>=13.9,<15",
-  "typer>=0.16,<1",
+  "typer>=0.27.1,<1",
 ]
 
 [project.optional-dependencies]
