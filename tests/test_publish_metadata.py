@@ -42,6 +42,23 @@ class PublishMetadataTests(unittest.TestCase):
         self.assertIn("description:", skill)
         self.assertIn("verify_bib_file", skill)
 
+    def test_standalone_release_targets_the_repository_explicitly(self):
+        workflow = (ROOT / ".github" / "workflows" / "publish-standalone.yml").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn("GH_REPO: ${{ github.repository }}", workflow)
+        self.assertIn('--repo "${GH_REPO}"', workflow)
+        self.assertIn("release_tag:", workflow)
+        self.assertIn("ref: ${{ inputs.release_tag || github.ref }}", workflow)
+        self.assertIn("RELEASE_TAG: ${{ inputs.release_tag || github.ref_name }}", workflow)
+
+    def test_mcp_publish_retries_registry_dependency_propagation(self):
+        workflow = (ROOT / ".github" / "workflows" / "publish-mcp.yml").read_text(encoding="utf-8")
+
+        self.assertIn("for attempt in 1 2 3 4 5 6", workflow)
+        self.assertIn("sleep 30", workflow)
+
 
 if __name__ == "__main__":
     unittest.main()
