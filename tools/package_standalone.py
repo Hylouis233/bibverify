@@ -46,11 +46,19 @@ def main() -> int:
 
     completed = subprocess.run(
         [str(binary), "--version"],
-        check=True,
+        check=False,
         capture_output=True,
         text=True,
         timeout=30,
     )
+    if completed.returncode != 0:
+        if completed.stdout:
+            print(completed.stdout, end="", file=sys.stdout)
+        if completed.stderr:
+            print(completed.stderr, end="", file=sys.stderr)
+        raise RuntimeError(
+            f"Standalone smoke test failed with exit code {completed.returncode}"
+        )
     if completed.stdout.strip() != package_version:
         raise RuntimeError(f"Unexpected standalone version: {completed.stdout!r}")
 
