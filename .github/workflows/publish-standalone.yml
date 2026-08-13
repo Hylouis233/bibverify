@@ -67,6 +67,13 @@ jobs:
           architecture: ${{ matrix.python_arch }}
           cache: pip
       - run: python -m pip install --upgrade pip
+      - name: Build cryptography with static OpenSSL on macOS Intel
+        if: matrix.target == 'macos-x64'
+        shell: bash
+        run: |
+          export OPENSSL_DIR="$(brew --prefix openssl@3)"
+          export OPENSSL_STATIC=1
+          python -m pip install --no-cache-dir --no-binary cryptography cryptography
       - run: python -m pip install -e ".[dev]"
       - run: python -m pytest
       - run: python -m bibverify benchmark
