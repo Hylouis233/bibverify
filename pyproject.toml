@@ -23,7 +23,7 @@ classifiers = [
   "Topic :: Scientific/Engineering :: Information Analysis",
 ]
 dependencies = [
-  "bibtexparser>=1.4.3,<2",
+  "bibtexparser>=1.4.4,<2",
   "mcp>=2.0,<3",
   "requests>=2.32,<3",
   "rich>=13.9,<15",
