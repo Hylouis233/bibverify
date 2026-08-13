@@ -21,8 +21,10 @@ from bibverify.agent import (
     format_doctor_report,
     init_agent,
 )
+from bibverify.benchmark import run_benchmark
+from bibverify.cache import ResponseCache
 from bibverify.checker import BibTeXChecker
-from bibverify.config import create_config
+from bibverify.config import create_config, load_config
 
 app = typer.Typer(
     name="bibverify",
@@ -34,10 +36,12 @@ config_app = typer.Typer(help="Create and inspect configuration files.")
 agent_app = typer.Typer(help="Set up Bibverify for AI assistants.")
 skill_app = typer.Typer(help="Export AI-assistant skill instructions.")
 providers_app = typer.Typer(help="Inspect academic metadata providers.")
+cache_app = typer.Typer(help="Inspect or clear the local metadata response cache.")
 app.add_typer(config_app, name="config")
 app.add_typer(agent_app, name="agent")
 app.add_typer(skill_app, name="skill")
 app.add_typer(providers_app, name="providers")
+app.add_typer(cache_app, name="cache")
 
 console = Console()
 error_console = Console(stderr=True)
@@ -74,10 +78,26 @@ def check(
     language: Annotated[
         str | None, typer.Option("--language", "-l", help="Output language: CN or EN.")
     ] = None,
+    report_format: Annotated[
+        str | None,
+        typer.Option("--format", help="Report format: txt, json, jsonl, or csv."),
+    ] = None,
     json_output: Annotated[
         bool, typer.Option("--json", help="Write a machine-readable summary to stdout.")
     ] = False,
     quiet: Annotated[bool, typer.Option("--quiet", "-q", help="Suppress progress output.")] = False,
+    dry_run: Annotated[
+        bool,
+        typer.Option(
+            "--dry-run", help="Verify without writing any report, backup, or BibTeX file."
+        ),
+    ] = False,
+    apply_changes: Annotated[
+        bool,
+        typer.Option(
+            "--apply", help="Apply high-confidence field updates to the input file after backup."
+        ),
+    ] = False,
 ) -> None:
     """Verify a BibTeX file and write safe output files."""
     overrides: dict[str, object] = {}
@@ -89,26 +109,52 @@ def check(
         overrides["encoding"] = encoding
     if language:
         overrides["language"] = language.upper()
+    if report_format:
+        overrides["output_settings"] = {"report_format": report_format.lower()}
 
+    if dry_run and apply_changes:
+        raise typer.BadParameter("--dry-run and --apply are mutually exclusive")
     captured = StringIO()
     try:
         if quiet or json_output:
             with redirect_stdout(captured):
-                summary = BibTeXChecker(config, overrides=overrides).run()
+                summary = BibTeXChecker(
+                    config,
+                    overrides=overrides,
+                    dry_run=dry_run,
+                    apply_changes=apply_changes,
+                ).run()
         else:
-            summary = BibTeXChecker(config, overrides=overrides).run()
+            summary = BibTeXChecker(
+                config,
+                overrides=overrides,
+                dry_run=dry_run,
+                apply_changes=apply_changes,
+            ).run()
     except (OSError, ValueError, json.JSONDecodeError) as exc:
         error_console.print(f"Error: {exc}")
-        raise typer.Exit(code=2) from exc
+        raise typer.Exit(code=5) from exc
 
     if json_output:
         typer.echo(json.dumps(summary, ensure_ascii=False, indent=2))
 
     counts = summary["counts"]
-    if counts["errors"]:
+    if counts.get("invalid_input", 0):
+        raise typer.Exit(code=5)
+    if (
+        not summary.get("complete", True)
+        or counts.get("source_unavailable", 0)
+        or counts.get("errors", 0)
+    ):
+        raise typer.Exit(code=4)
+    if (
+        counts.get("ambiguous", 0)
+        or counts.get("not_found", 0)
+        or counts.get("identifier_conflict", 0)
+    ):
         raise typer.Exit(code=3)
-    if counts["not_found"]:
-        raise typer.Exit(code=1)
+    if counts.get("updated", 0):
+        raise typer.Exit(code=2)
 
 
 @app.command()
@@ -184,6 +230,33 @@ def providers_list(json_output: Annotated[bool, typer.Option("--json")] = False)
             console.print(name)
 
 
+@cache_app.command("clear")
+def cache_clear(
+    config: Annotated[Path, typer.Option("--config", "-c", help="Configuration JSON path.")] = Path(
+        "config.json"
+    ),
+) -> None:
+    """Delete Bibverify's SQLite response cache."""
+    loaded, _ = load_config(config)
+    path = Path(loaded["query_settings"]["cache_path"])
+    removed = ResponseCache(path).clear()
+    console.print(f"{'Removed' if removed else 'No cache found at'} {path}")
+
+
+@app.command("benchmark")
+def benchmark_command(
+    dataset: Annotated[
+        Path | None,
+        typer.Option("--dataset", help="Path to a labeled JSON benchmark dataset."),
+    ] = None,
+) -> None:
+    """Run the deterministic offline matching benchmark."""
+    result = run_benchmark(dataset)
+    typer.echo(json.dumps(result, ensure_ascii=False, indent=2))
+    if result["wrong_auto_match_rate"] > 0:
+        raise typer.Exit(code=1)
+
+
 @app.command("mcp")
 def mcp_command(
     config: Annotated[
@@ -192,6 +265,13 @@ def mcp_command(
     transport: Annotated[
         str, typer.Option(help="MCP transport: stdio or streamable-http.")
     ] = "stdio",
+    workspace_root: Annotated[
+        Path | None,
+        typer.Option(
+            "--workspace-root",
+            help="Restrict MCP file reads/writes to this directory (defaults to the config directory).",
+        ),
+    ] = None,
 ) -> None:
     """Run the official MCP SDK server."""
     from bibverify.mcp_server import run_server
@@ -201,6 +281,7 @@ def mcp_command(
     run_server(
         default_config=str(config),
         transport=cast(Literal["stdio", "streamable-http"], transport),
+        workspace_root=str(workspace_root) if workspace_root else None,
     )
 
 
@@ -245,7 +326,18 @@ def skill_export(
 
 def _translate_legacy_args(argv: list[str]) -> list[str]:
     """Keep v0.2 command forms working during the v0.3 transition."""
-    commands = {"check", "doi", "config", "doctor", "providers", "mcp", "agent", "skill"}
+    commands = {
+        "check",
+        "doi",
+        "config",
+        "doctor",
+        "providers",
+        "cache",
+        "benchmark",
+        "mcp",
+        "agent",
+        "skill",
+    }
     if "--doi" in argv:
         index = argv.index("--doi")
         if index + 1 >= len(argv):

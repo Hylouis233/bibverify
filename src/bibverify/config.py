@@ -33,16 +33,25 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "query_settings": {
         "delay_between_requests": 0.5,
         "timeout": 10.0,
+        "connect_timeout": 3.05,
+        "read_timeout": 20.0,
         "max_retries": 3,
         "backoff_factor": 0.5,
         "stop_on_first_match": True,
         "title_match_threshold": 0.86,
+        "match_threshold": 0.86,
+        "ambiguous_threshold": 0.68,
+        "ambiguity_margin": 0.04,
+        "auto_update_threshold": 0.92,
+        "cache_enabled": True,
+        "cache_ttl_hours": 168,
+        "cache_path": ".bibverify-cache.sqlite3",
     },
     "output_settings": {
         "generate_report": True,
         "generate_backup": True,
         "generate_updated_bib": True,
-        "generate_wrong_bib": True,
+        "generate_review_bib": True,
         "report_format": "txt",
         "timestamp_format": "%Y%m%d_%H%M%S",
     },
@@ -92,8 +101,19 @@ def load_config(
         user_config = parsed
 
     config = deep_merge(DEFAULT_CONFIG, user_config)
+    if "generate_wrong_bib" in user_config.get("output_settings", {}):
+        config["output_settings"]["generate_review_bib"] = user_config["output_settings"][
+            "generate_wrong_bib"
+        ]
     if overrides:
         config = deep_merge(config, overrides)
+
+    # ``timeout`` was the only timeout option before v0.3. Keep it effective
+    # unless the same configuration layer explicitly sets ``read_timeout``.
+    for layer in (user_config, overrides or {}):
+        query_layer = layer.get("query_settings", {})
+        if "timeout" in query_layer and "read_timeout" not in query_layer:
+            config["query_settings"]["read_timeout"] = query_layer["timeout"]
 
     language = str(config.get("language", "CN")).upper()
     if language not in {"CN", "EN"}:
@@ -103,19 +123,39 @@ def load_config(
     query = config["query_settings"]
     if float(query["timeout"]) <= 0:
         raise ValueError("query_settings.timeout must be greater than zero.")
+    if float(query["connect_timeout"]) <= 0 or float(query["read_timeout"]) <= 0:
+        raise ValueError(
+            "query_settings connect_timeout and read_timeout must be greater than zero."
+        )
     if int(query["max_retries"]) < 0:
         raise ValueError("query_settings.max_retries cannot be negative.")
     if float(query["delay_between_requests"]) < 0:
         raise ValueError("query_settings.delay_between_requests cannot be negative.")
-    threshold = float(query["title_match_threshold"])
-    if not 0 <= threshold <= 1:
-        raise ValueError("query_settings.title_match_threshold must be between zero and one.")
+    for field in (
+        "title_match_threshold",
+        "match_threshold",
+        "ambiguous_threshold",
+        "ambiguity_margin",
+        "auto_update_threshold",
+    ):
+        threshold = float(query[field])
+        if not 0 <= threshold <= 1:
+            raise ValueError(f"query_settings.{field} must be between zero and one.")
+    if float(query["ambiguous_threshold"]) > float(query["match_threshold"]):
+        raise ValueError("query_settings.ambiguous_threshold cannot exceed match_threshold.")
+    if float(query["cache_ttl_hours"]) < 0:
+        raise ValueError("query_settings.cache_ttl_hours cannot be negative.")
+    report_format = str(config["output_settings"]["report_format"]).lower()
+    if report_format not in {"txt", "json", "jsonl", "csv"}:
+        raise ValueError("output_settings.report_format must be txt, json, jsonl, or csv.")
+    config["output_settings"]["report_format"] = report_format
 
     config["bib_file"] = _resolve_path(config["bib_file"], base_dir)
     output_dir = config.get("output_dir")
     config["output_dir"] = (
         _resolve_path(output_dir, base_dir) if output_dir else str(Path(config["bib_file"]).parent)
     )
+    config["query_settings"]["cache_path"] = _resolve_path(query["cache_path"], base_dir)
 
     email = os.getenv("BIBVERIFY_EMAIL")
     if email:

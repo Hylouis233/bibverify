@@ -1,0 +1,14 @@
+{
+  "data": [
+    {
+      "paperId": "paper-1",
+      "matchScore": 99.0,
+      "title": "Reliable Bibliographic Verification",
+      "authors": [{"name": "Ada Lovelace"}],
+      "year": 2026,
+      "venue": "Journal of Metadata",
+      "publicationTypes": ["JournalArticle"],
+      "externalIds": {"DOI": "10.1000/reliable", "PubMed": "12345678"}
+    }
+  ]
+}

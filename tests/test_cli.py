@@ -71,6 +71,22 @@ def test_cli_path_overrides_resolve_from_current_directory(tmp_path, monkeypatch
     assert Path(overrides["output_dir"]) == (tmp_path / "relative/output").resolve()
 
 
+def test_cli_report_format_override_is_forwarded(tmp_path):
+    summary = {
+        "complete": True,
+        "counts": {"total": 0, "verified": 0, "updated": 0, "not_found": 0, "errors": 0},
+        "files": {},
+    }
+    with patch("bibverify.cli.BibTeXChecker") as checker_class:
+        checker_class.return_value.run.return_value = summary
+        result = runner.invoke(app, ["check", "--format", "jsonl", "--json"])
+
+    assert result.exit_code == 0
+    assert checker_class.call_args.kwargs["overrides"]["output_settings"] == {
+        "report_format": "jsonl"
+    }
+
+
 def test_legacy_cli_forms_are_translated():
     assert _translate_legacy_args(["config.json"]) == ["check", "--config", "config.json"]
     assert _translate_legacy_args(["config.json", "--doi", "10.1/test", "--key", "demo"]) == [
@@ -81,3 +97,11 @@ def test_legacy_cli_forms_are_translated():
         "--key",
         "demo",
     ]
+
+
+def test_invalid_input_uses_documented_exit_code(tmp_path):
+    missing = tmp_path / "missing.bib"
+
+    result = runner.invoke(app, ["check", str(missing), "--dry-run"])
+
+    assert result.exit_code == 5

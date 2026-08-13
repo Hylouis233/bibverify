@@ -66,6 +66,9 @@ cover/
 local_settings.py
 db.sqlite3
 db.sqlite3-journal
+.bibverify-cache.sqlite3
+.bibverify-cache.sqlite3-shm
+.bibverify-cache.sqlite3-wal
 
 # Flask stuff:
 instance/

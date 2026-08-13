@@ -37,6 +37,7 @@ def test_http_client_configures_retryable_statuses():
     retry = mounted[0][1].max_retries
     assert retry.total == 4
     assert retry.backoff_factor == 1.25
+    assert 408 in retry.status_forcelist
     assert 429 in retry.status_forcelist
     assert 503 in retry.status_forcelist
     assert retry.respect_retry_after_header is True

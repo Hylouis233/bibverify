@@ -3,7 +3,7 @@
 <!-- mcp-name: io.github.Hylouis233/bibverify -->
 
 <p align="center">
-  <strong>Verify, repair, and enrich BibTeX references with confidence.</strong>
+  <strong>Verify bibliographic existence and metadata consistency without destructive edits.</strong>
 </p>
 
 <p align="center">
@@ -17,16 +17,19 @@
   <a href="https://github.com/Hylouis233/bibverify/actions/workflows/ci.yml"><img src="https://github.com/Hylouis233/bibverify/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
 </p>
 
-Bibverify is a BibTeX verification tool for researchers, editors, automation, and AI assistants. It starts with an exact DOI lookup when possible, dynamically ranks metadata providers from identifiers and subject hints, and accepts a candidate only after title-similarity checks.
+Bibverify is a BibTeX metadata verification tool for researchers, editors, automation, and AI assistants. It starts with exact DOI, PMID, PMCID, or arXiv identifiers and then scores candidates from title, author, year, venue, and pagination evidence.
 
-Your source `.bib` file is never overwritten in place. Bibverify writes a report, a byte-for-byte backup, an updated bibliography, and a separate file for entries that need manual attention.
+Bibverify evaluates whether a bibliographic record can be located in the queried sources and whether its metadata agrees. It does not prove that research findings are true, data is authentic, or a venue is reputable. A missing database record is not evidence that a reference is fabricated. By default, the source `.bib` file is never overwritten.
 
 ## Highlights
 
-- DOI-first lookup through Crossref, with title lookup as a fallback.
+- Identifier-first lookup for DOI, PMID, PMCID, and arXiv IDs.
 - Crossref, OpenAlex, Semantic Scholar, PubMed, Europe PMC, CORE, DBLP, arXiv, bioRxiv, and more.
-- Conservative title matching based on sequence similarity, token overlap, and relative length.
+- Explainable multi-signal matching across identifiers, title, authors, year, venue, and pages. A resolvable DOI with a materially different title becomes `identifier_conflict` instead of being hidden by title search.
+- Structured provider outcomes distinguish a genuine no-match from rate limiting, authentication, network, parsing, and provider failures.
+- Non-destructive merging preserves `abstract`, `keywords`, `file`, `note`, and custom fields that providers do not return; conflicting persistent identifiers are never overwritten automatically.
 - A shared connection pool with retries, exponential backoff, and `Retry-After` support for `429/5xx` responses.
+- An expiring SQLite cache for successful GET responses; failures are never cached.
 - Cross-platform path, encoding, Unicode filename, UTF-8 BOM, and CRLF handling.
 - JSON output, stable exit codes, a Python API, and an MCP server built on the official SDK.
 - Atomic output writes and byte-preserving backups.
@@ -91,6 +94,18 @@ You can override the input and output paths from the command line:
 
 ```bash
 bibverify check references.bib --config config.json --output-dir bibverify-output
+```
+
+Inspect results without writing any file:
+
+```bash
+bibverify check references.bib --dry-run --json
+```
+
+After reviewing the report, explicitly apply high-confidence field updates. Bibverify creates a byte-for-byte backup first:
+
+```bash
+bibverify check references.bib --apply
 ```
 
 PowerShell example:
@@ -166,25 +181,36 @@ bibverify check --config config.json
   "query_settings": {
     "delay_between_requests": 0.5,
     "timeout": 10,
+    "connect_timeout": 3.05,
+    "read_timeout": 20,
     "max_retries": 3,
     "backoff_factor": 0.5,
     "stop_on_first_match": true,
-    "title_match_threshold": 0.86
+    "match_threshold": 0.86,
+    "ambiguous_threshold": 0.68,
+    "auto_update_threshold": 0.92,
+    "cache_enabled": true,
+    "cache_ttl_hours": 168,
+    "cache_path": ".bibverify-cache.sqlite3"
   }
 }
 ```
 
-A higher title threshold is more conservative. Values below `0.80` are not recommended unless you understand the false-match risk.
+`connect_timeout` and `read_timeout` separately bound connection setup and response reads; the compatibility `timeout` field remains available. `match_threshold` controls automatic candidate acceptance, `ambiguous_threshold` controls which plausible candidates enter review, and `auto_update_threshold` is an additional gate for field changes. Higher values are more conservative. Relative cache paths are resolved from the config directory.
+
+The official bioRxiv `details` route does not provide arbitrary title search. Bibverify therefore calls bioRxiv only for an exact `10.1101/...` DOI and leaves title-only discovery to providers whose contracts support it, such as Crossref and Europe PMC.
 
 ## CLI reference
 
 ```text
-bibverify check [BIB_FILE] [--config PATH] [--output-dir DIR] [--json]
+bibverify check [BIB_FILE] [--config PATH] [--output-dir DIR] [--format txt|json|jsonl|csv] [--dry-run|--apply] [--json]
 bibverify doi DOI [--key KEY] [--config PATH] [--json]
 bibverify config init [--output PATH] [--force]
 bibverify doctor [--config PATH] [--json]
 bibverify providers list [--json]
-bibverify mcp [--config PATH] [--transport stdio|streamable-http]
+bibverify cache clear [--config PATH]
+bibverify benchmark [--dataset PATH]
+bibverify mcp [--config PATH] [--workspace-root DIR] [--transport stdio|streamable-http]
 bibverify agent init [--target generic|codex|claude|cursor]
 bibverify skill export [--target ...]
 ```
@@ -193,10 +219,12 @@ Exit codes:
 
 | Code | Meaning |
 |---:|---|
-| `0` | Verification completed successfully |
-| `1` | Completed, but one or more entries were not found |
-| `2` | Configuration, path, encoding, or argument error |
-| `3` | One or more entries failed during processing |
+| `0` | Verification completed and metadata is consistent |
+| `1` | Runtime error reserved for uncategorized command failures |
+| `2` | Metadata differences or high-confidence updates exist |
+| `3` | Ambiguous, not-found, or identifier-conflict entries require review |
+| `4` | A provider was unavailable and verification is incomplete |
+| `5` | The input file, configuration, or entry is invalid |
 
 With `--json`, stdout contains JSON only. Diagnostics go to stderr, which keeps the command safe for CI and scripts.
 
@@ -204,23 +232,25 @@ With `--json`, stdout contains JSON only. Diagnostics go to stderr, which keeps 
 
 For an input named `references.bib`, Bibverify may create:
 
-- `bib_check_report_<timestamp>.txt`: summary and field-level differences.
+- `bibverify_report_<timestamp>.<format>`: complete states, candidates, provider errors, confidence, and field provenance in `txt`, `json`, `jsonl`, or `csv`.
 - `references_backup_<timestamp>.bib`: byte-for-byte copy of the source.
-- `references_updated_<timestamp>.bib`: complete, ready-to-use bibliography with accepted updates; omitted when no entries change.
-- `references_wrong_<timestamp>.bib`: entries that were not found or failed; omitted when no entries need attention.
+- `references_updated_<timestamp>.bib`: complete bibliography after non-destructive merging; omitted when nothing changes.
+- `references_review_<timestamp>.bib`: ambiguous, not-found, unavailable-source, identifier-conflict, or invalid entries; omitted when nothing needs review.
 
-Each output can be disabled independently through `output_settings`.
+The report-level `complete` value is true only when every entry completed verification. A rate-limited or unreachable provider makes it false even if another source found a candidate. Each `field_diffs` record includes original/suggested values, source, confidence, normalized equivalence, action, and reason.
+
+Each output can be disabled independently through `output_settings`. `--dry-run` overrides those settings and performs zero writes. The default command only writes proposals; only `--apply` changes the source after a backup.
 
 ## Provider ranking
 
 Static priority is only the starting point:
 
-1. A DOI promotes Crossref and uses its exact DOI endpoint first.
+1. A DOI promotes Crossref and uses its exact endpoint first. A resolvable DOI with a materially different title stops as `identifier_conflict`.
 2. PMID, PMCID, or biomedical hints promote PubMed and Europe PMC.
 3. An arXiv identifier promotes arXiv.
 4. Computer-science venue hints promote DBLP.
 
-Unpaywall is currently treated as open-access enrichment, not as a primary bibliographic metadata provider.
+Unpaywall is currently treated as open-access enrichment, not as a primary bibliographic metadata provider. Provider states distinguish `matched`, `no_match`, `ambiguous`, `rate_limited`, `auth_error`, `network_error`, `parse_error`, `provider_error`, and `skipped`.
 
 ## MCP and AI assistants
 
@@ -229,7 +259,7 @@ Bibverify uses the official MCP Python SDK and supports local stdio and Streamab
 Start a stdio server:
 
 ```bash
-bibverify mcp --config config.json
+bibverify mcp --config config.json --workspace-root .
 ```
 
 MCP client configuration:
@@ -250,6 +280,8 @@ Start Streamable HTTP:
 ```bash
 bibverify mcp --transport streamable-http --config config.json
 ```
+
+MCP treats the configuration directory as its workspace root by default. It rejects config or `.bib` reads outside that root and blocks report, cache, or update writes outside it. Broaden access only by explicitly setting `--workspace-root` when starting the server. The official MCP SDK handles protocol negotiation, schemas, structured results, progress, and cancellation.
 
 Available tools:
 
@@ -295,9 +327,13 @@ python -m ruff format --check src tests bib_check.py
 python -m mypy
 python -m build
 python -m twine check dist/*
+python -m bibverify benchmark --dataset benchmarks/cases.json
+python -m pip_audit . --strict
 ```
 
-CI tests Windows, macOS, and Linux on Python 3.11–3.14, plus dedicated lint, strict type checks for modern interface boundaries, coverage, and packaging jobs. Releases use PyPI Trusted Publishing, so no upload token is stored in the repository.
+CI tests Windows, macOS, and Linux on Python 3.11–3.14, including provider fixtures, golden write-safety tests, lint, typing, coverage, the offline benchmark, dependency auditing, package builds, and a CycloneDX SBOM. GitHub Actions are pinned to commit SHAs, while the MCP Publisher is version-pinned and SHA-256 verified. PyPI uses Trusted Publishing with default digital attestations, so no upload token is stored in the repository.
+
+`benchmarks/cases.json` is a small offline regression set covering short-title false positives, DOI conflicts, preprint title variants, Unicode/LaTeX, and fabricated author combinations. It is not a complete scientific evaluation and its scores must not be interpreted as real-world performance ceilings. Contributions of broader, redistributable, human-labeled cases are welcome.
 
 ## Citation
 

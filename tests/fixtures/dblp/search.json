@@ -1,0 +1,18 @@
+{
+  "result": {
+    "hits": {
+      "hit": [
+        {
+          "info": {
+            "type": "Journal Articles",
+            "title": "Reliable Bibliographic Verification",
+            "authors": {"author": [{"text": "Ada Lovelace"}]},
+            "year": "2026",
+            "venue": "Journal of Metadata",
+            "doi": "10.1000/reliable"
+          }
+        }
+      ]
+    }
+  }
+}

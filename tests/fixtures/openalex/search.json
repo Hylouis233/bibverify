@@ -1,0 +1,14 @@
+{
+  "results": [
+    {
+      "id": "https://openalex.org/W1",
+      "type": "article",
+      "title": "Reliable Bibliographic Verification",
+      "publication_year": 2026,
+      "doi": "https://doi.org/10.1000/reliable",
+      "authorships": [{"author": {"display_name": "Ada Lovelace"}}],
+      "primary_location": {"source": {"display_name": "Journal of Metadata"}},
+      "biblio": {"volume": "1", "issue": "2", "first_page": "1", "last_page": "9"}
+    }
+  ]
+}

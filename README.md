@@ -3,7 +3,7 @@
 <!-- mcp-name: io.github.Hylouis233/bibverify -->
 
 <p align="center">
-  <strong>查证、修复并补全文献引用，让 BibTeX 更可信。</strong>
+  <strong>核验书目记录存在性与元数据一致性，安全整理 BibTeX。</strong>
 </p>
 
 <p align="center">
@@ -17,16 +17,19 @@
   <a href="https://github.com/Hylouis233/bibverify/actions/workflows/ci.yml"><img src="https://github.com/Hylouis233/bibverify/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
 </p>
 
-Bibverify 是一个面向研究者、编辑和 AI 助手的 BibTeX 文献验证工具。它优先使用 DOI 精确查询，并根据 PMID、arXiv 标识和学科线索动态调整数据源顺序；查询结果经过标题相似度校验后，才会用于生成更新建议。
+Bibverify 是一个面向研究者、编辑、自动化流程和 AI 助手的 BibTeX 元数据核验工具。它优先使用 DOI、PMID、PMCID 或 arXiv ID 精确定位记录，再结合标题、作者、年份、期刊与页码等信号评估候选项。
 
-原始 `.bib` 文件不会被原地覆盖。Bibverify 会在指定输出目录中生成报告、逐字节备份、更新建议和问题条目文件。
+Bibverify 判断的是“已查询数据源中的书目记录与元数据是否一致”，而不是论文结论是否真实、数据是否造假或期刊是否可信。数据库未收录也不等于文献虚构；这类结果会明确标为“未在已查询数据源中检索到”或“需要人工复核”。默认运行不会改写原始 `.bib` 文件。
 
 ## 主要能力
 
-- DOI 优先：有 DOI 时先查询 Crossref 精确接口，再按需回退到标题检索。
+- 标识符优先：DOI、PMID、PMCID 和 arXiv ID 会走相应平台的精确接口。
 - 多数据源：支持 Crossref、OpenAlex、Semantic Scholar、PubMed、Europe PMC、CORE、DBLP、arXiv、bioRxiv 等。
-- 降低误匹配：结合字符序列、词元重叠和长度比例计算标题相似度，阈值可配置。
+- 可解释匹配：综合标识符、标题、作者、年份、期刊和页码；DOI 指向不同标题时标记为 `identifier_conflict`，不会用标题搜索掩盖冲突。
+- 结构化状态：区分正常无结果、歧义、限流、鉴权失败、网络错误和解析错误；数据源故障不会落入 `not_found`。
+- 非破坏性更新：API 未返回的 `abstract`、`keywords`、`file`、`note` 及自定义字段不会删除；不同持久标识符绝不自动覆盖。
 - 稳健网络层：复用连接，对 `429/5xx` 自动重试和指数退避，并尊重 `Retry-After`。
+- 本地缓存：成功的 GET 响应可写入有过期时间的 SQLite 缓存；失败响应不会缓存。
 - 跨平台文件处理：支持 Windows、macOS 和 Linux；正确处理空格、中文路径、UTF-8 BOM 与 CRLF。
 - 适合自动化：提供 JSON 输出、稳定退出码、Python API 和基于官方 SDK 的 MCP 服务。
 - 安全输出：使用原子写入；备份保留原始字节与换行，不会悄悄改写源文件。
@@ -91,6 +94,18 @@ bibverify check --config config.json
 
 ```bash
 bibverify check references.bib --config config.json --output-dir bibverify-output
+```
+
+仅查看核验结果、不写任何文件：
+
+```bash
+bibverify check references.bib --dry-run --json
+```
+
+确认报告后，可显式应用高置信度字段更新；Bibverify 会先做逐字节备份：
+
+```bash
+bibverify check references.bib --apply
 ```
 
 PowerShell 示例：
@@ -166,25 +181,36 @@ bibverify check --config config.json
   "query_settings": {
     "delay_between_requests": 0.5,
     "timeout": 10,
+    "connect_timeout": 3.05,
+    "read_timeout": 20,
     "max_retries": 3,
     "backoff_factor": 0.5,
     "stop_on_first_match": true,
-    "title_match_threshold": 0.86
+    "match_threshold": 0.86,
+    "ambiguous_threshold": 0.68,
+    "auto_update_threshold": 0.92,
+    "cache_enabled": true,
+    "cache_ttl_hours": 168,
+    "cache_path": ".bibverify-cache.sqlite3"
   }
 }
 ```
 
-阈值越高，匹配越保守。除非你理解误匹配风险，否则不建议低于 `0.80`。
+`connect_timeout` 和 `read_timeout` 分别限制连接与响应读取；兼容字段 `timeout` 仍保留。`match_threshold` 控制自动接受候选的最低分，`ambiguous_threshold` 控制进入人工复核的最低分，`auto_update_threshold` 进一步限制字段自动更新。阈值越高越保守。`cache_path` 的相对路径同样相对于配置文件目录。
+
+bioRxiv 官方 `details` 路由不支持任意标题搜索，因此 Bibverify 只在存在 `10.1101/...` DOI 时直接查询 bioRxiv；纯标题检索交给 Crossref、Europe PMC 等支持该契约的数据源。
 
 ## 命令行参考
 
 ```text
-bibverify check [BIB_FILE] [--config PATH] [--output-dir DIR] [--json]
+bibverify check [BIB_FILE] [--config PATH] [--output-dir DIR] [--format txt|json|jsonl|csv] [--dry-run|--apply] [--json]
 bibverify doi DOI [--key KEY] [--config PATH] [--json]
 bibverify config init [--output PATH] [--force]
 bibverify doctor [--config PATH] [--json]
 bibverify providers list [--json]
-bibverify mcp [--config PATH] [--transport stdio|streamable-http]
+bibverify cache clear [--config PATH]
+bibverify benchmark [--dataset PATH]
+bibverify mcp [--config PATH] [--workspace-root DIR] [--transport stdio|streamable-http]
 bibverify agent init [--target generic|codex|claude|cursor]
 bibverify skill export [--target ...]
 ```
@@ -193,10 +219,12 @@ bibverify skill export [--target ...]
 
 | 退出码 | 含义 |
 |---:|---|
-| `0` | 全部处理成功 |
-| `1` | 处理完成，但有条目未找到 |
-| `2` | 配置、路径、编码或参数错误 |
-| `3` | 处理过程中出现错误 |
+| `0` | 核验完成，元数据一致 |
+| `1` | 运行错误（保留给不可归类的命令失败） |
+| `2` | 存在元数据差异或高置信度更新建议 |
+| `3` | 存在歧义、未检索到或标识符冲突，需要人工复核 |
+| `4` | 数据源不可用，核验不完整 |
+| `5` | 输入文件、配置或条目无效 |
 
 使用 `--json` 时，stdout 只输出 JSON；诊断信息写入 stderr，适合 CI 和脚本解析。
 
@@ -204,23 +232,25 @@ bibverify skill export [--target ...]
 
 以 `references.bib` 为例：
 
-- `bib_check_report_<时间>.txt`：验证摘要与字段差异。
+- `bibverify_report_<时间>.<格式>`：完整状态、候选、Provider 错误、置信度和字段级来源；支持 `txt`、`json`、`jsonl`、`csv`。
 - `references_backup_<时间>.bib`：原文件逐字节备份。
-- `references_updated_<时间>.bib`：更新后的完整可用文献库；无更新时不生成。
-- `references_wrong_<时间>.bib`：未找到或处理失败的条目；无问题时不生成。
+- `references_updated_<时间>.bib`：非破坏性合并后的完整文献库；无更新时不生成。
+- `references_review_<时间>.bib`：歧义、未检索到、数据源不可用、标识符冲突或无效条目；无待复核项时不生成。
 
-可通过 `output_settings` 分别关闭报告、备份、更新文件或问题文件。
+报告顶层 `complete` 仅在所有条目均完成核验时为 `true`。Provider 限流或网络故障会令其为 `false`，即使其他来源找到了候选。`field_diffs` 会记录原值、建议值、来源、置信度、标准化等价性、动作和理由。
+
+可通过 `output_settings` 分别关闭报告、备份、更新文件或复核文件；`--dry-run` 会覆盖这些设置并保证零写入。默认只生成建议文件，只有 `--apply` 会在完成备份后修改源文件。
 
 ## 数据源顺序
 
 静态优先级不是唯一依据：
 
-1. DOI 会提升 Crossref，并先走 DOI 精确接口。
+1. DOI 会提升 Crossref，并先走 DOI 精确接口；可解析但标题明显冲突时停止并报告 `identifier_conflict`。
 2. PMID/PMCID 或生物医学线索会提升 PubMed 与 Europe PMC。
 3. arXiv 标识会提升 arXiv。
 4. 计算机科学会议和期刊线索会提升 DBLP。
 
-Unpaywall 当前只作为开放获取信息补充，不作为主书目元数据源。
+Unpaywall 当前只作为开放获取信息补充，不作为主书目元数据源。Provider 结果会分别标为 `matched`、`no_match`、`ambiguous`、`rate_limited`、`auth_error`、`network_error`、`parse_error`、`provider_error` 或 `skipped`。
 
 ## MCP 与 AI 助手
 
@@ -229,7 +259,7 @@ Bibverify 使用官方 MCP Python SDK，可运行本地 stdio 或 Streamable HTT
 stdio：
 
 ```bash
-bibverify mcp --config config.json
+bibverify mcp --config config.json --workspace-root .
 ```
 
 MCP 客户端配置：
@@ -250,6 +280,8 @@ Streamable HTTP：
 ```bash
 bibverify mcp --transport streamable-http --config config.json
 ```
+
+MCP 默认将配置文件所在目录视为工作区根目录，并拒绝读取该目录之外的配置或 `.bib` 文件，也拒绝向工作区之外写报告、缓存和更新文件。需要更大的范围时必须在启动服务器时显式传入 `--workspace-root`。协议协商、Schema、结构化结果、进度和取消由官方 MCP SDK 处理。
 
 提供的工具：
 
@@ -295,9 +327,13 @@ python -m ruff format --check src tests bib_check.py
 python -m mypy
 python -m build
 python -m twine check dist/*
+python -m bibverify benchmark --dataset benchmarks/cases.json
+python -m pip_audit . --strict
 ```
 
-CI 会在 Windows、macOS、Linux 和 Python 3.11–3.14 上运行测试，并独立执行 lint、现代接口边界的严格类型检查、覆盖率和包构建验证。发布使用 PyPI Trusted Publishing，不在仓库中保存上传令牌。
+CI 会在 Windows、macOS、Linux 和 Python 3.11–3.14 上运行测试，并执行 fixture/golden 测试、lint、类型检查、覆盖率、离线 benchmark、依赖漏洞审计、包构建与 CycloneDX SBOM 生成。GitHub Actions 固定到提交 SHA；MCP Publisher 固定版本并校验 SHA-256。PyPI 发布使用 Trusted Publishing 与默认的数字证明，不在仓库中保存上传令牌。
+
+`benchmarks/cases.json` 是用于防止匹配策略回归的最小离线标注集，覆盖短标题误匹配、DOI 冲突、预印本标题变体、Unicode/LaTeX 和虚构作者组合。它不是完整科研评测，也不能代表真实世界的最终精确率；欢迎提交更广泛、可再分发的人工标注案例。
 
 ## 引用
 

@@ -6,10 +6,12 @@ import io
 import json
 from contextlib import redirect_stdout
 from pathlib import Path
-from typing import Any, Literal, cast
+from typing import Any, Literal
 
 import anyio
 from mcp.server import MCPServer
+from mcp.server.mcpserver import Context
+from mcp_types import LATEST_PROTOCOL_VERSION
 
 from bibverify import __version__
 from bibverify.checker import BibTeXChecker
@@ -17,7 +19,35 @@ from bibverify.checker import BibTeXChecker
 Transport = Literal["stdio", "streamable-http"]
 
 
-def create_server(default_config: str = "config.json") -> MCPServer[None]:
+def _resolve_within(root: Path, value: str | Path, *, label: str) -> Path:
+    path = Path(value).expanduser()
+    if not path.is_absolute():
+        path = root / path
+    path = path.resolve(strict=False)
+    try:
+        path.relative_to(root)
+    except ValueError as exc:
+        raise ValueError(f"{label} must stay within the MCP workspace root: {root}") from exc
+    return path
+
+
+def _guard_config_workspace(config_path: Path, workspace_root: Path) -> None:
+    """Validate both configured input and output paths before any tool writes."""
+    from bibverify.config import load_config
+
+    config, _ = load_config(config_path)
+    _resolve_within(workspace_root, config["bib_file"], label="bib_file")
+    _resolve_within(workspace_root, config["output_dir"], label="output_dir")
+    _resolve_within(
+        workspace_root,
+        config["query_settings"]["cache_path"],
+        label="query_settings.cache_path",
+    )
+
+
+def create_server(
+    default_config: str = "config.json", *, workspace_root: str | Path | None = None
+) -> MCPServer[None]:
     """Build a protocol-compliant MCP server with typed tool schemas."""
     server: MCPServer[None] = MCPServer(
         "bibverify",
@@ -27,8 +57,13 @@ def create_server(default_config: str = "config.json") -> MCPServer[None]:
         website_url="https://github.com/Hylouis233/bibverify",
     )
 
+    default_path = Path(default_config).expanduser().resolve(strict=False)
+    root = Path(workspace_root or default_path.parent).expanduser().resolve(strict=False)
+
     def checker(config_file: str | None = None) -> BibTeXChecker:
-        return BibTeXChecker(Path(config_file or default_config))
+        config_path = _resolve_within(root, config_file or default_path, label="config_file")
+        _guard_config_workspace(config_path, root)
+        return BibTeXChecker(config_path)
 
     @server.tool(structured_output=True)
     def doi_to_bibtex(
@@ -67,19 +102,32 @@ def create_server(default_config: str = "config.json") -> MCPServer[None]:
         return {"differences": differences}
 
     @server.tool(structured_output=True)
-    def verify_bib_file(config_file: str | None = None) -> dict[str, Any]:
+    async def verify_bib_file(
+        config_file: str | None = None,
+        ctx: Context[None, Any] | None = None,
+    ) -> dict[str, Any]:
         """Verify the configured BibTeX file and return a structured summary."""
+        if ctx:
+            await ctx.report_progress(0, 1, "Starting bibliography verification")
         with redirect_stdout(io.StringIO()):
-            return cast(dict[str, Any], checker(config_file).run())
+            summary = checker(config_file).run()
+        if ctx:
+            await ctx.report_progress(1, 1, "Bibliography verification completed")
+        return summary
 
     return server
 
 
-def run_server(default_config: str = "config.json", transport: Transport = "stdio") -> None:
+def run_server(
+    default_config: str = "config.json",
+    transport: Transport = "stdio",
+    *,
+    workspace_root: str | Path | None = None,
+) -> None:
     """Run Bibverify over stdio or Streamable HTTP."""
     if transport not in {"stdio", "streamable-http"}:
         raise ValueError("transport must be 'stdio' or 'streamable-http'")
-    create_server(default_config).run(transport=transport)
+    create_server(default_config, workspace_root=workspace_root).run(transport=transport)
 
 
 def _text_result(
@@ -93,7 +141,12 @@ def _text_result(
 
 
 def _call_compat(name: str, arguments: dict[str, Any], default_config: str) -> dict[str, Any]:
-    config_file = arguments.get("config_file") or default_config
+    default_path = Path(default_config).expanduser().resolve(strict=False)
+    root = default_path.parent
+    config_file = _resolve_within(
+        root, arguments.get("config_file") or default_path, label="config_file"
+    )
+    _guard_config_workspace(config_file, root)
     with redirect_stdout(io.StringIO()):
         checker = BibTeXChecker(config_file)
         if name == "doi_to_bibtex":
@@ -130,7 +183,7 @@ def handle_request(
             "jsonrpc": "2.0",
             "id": request_id,
             "result": {
-                "protocolVersion": "2025-06-18",
+                "protocolVersion": LATEST_PROTOCOL_VERSION,
                 "capabilities": {"tools": {"listChanged": False}},
                 "serverInfo": {"name": "bibverify", "version": __version__},
             },

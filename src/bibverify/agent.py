@@ -1,6 +1,7 @@
 """Helpers for configuring AI-assistant integrations."""
 
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -48,7 +49,8 @@ description: Verify, repair, and generate BibTeX references through the Bibverif
 1. Prefer `doi_to_bibtex` when the user gives a DOI.
 2. Use `rank_lookup_sources` before a full verification when the user asks why a source is queried first.
 3. Use `verify_bib_file` for project-level `.bib` verification. The default config file is `{config_file}`.
-4. Explain any changed fields in plain language. Do not silently overwrite the user's source `.bib`; Bibverify writes timestamped backup, updated, and wrong-entry files.
+4. Explain any changed fields in plain language. Do not silently overwrite the user's source `.bib`; default verification writes timestamped reports, backups, updated proposals, and manual-review files. Only an explicit `--apply` changes the source.
+5. Distinguish `not_found` from `source_unavailable`, and do not call an unindexed reference fake or fabricated.
 
 ## Example User Requests
 
@@ -163,7 +165,30 @@ def doctor(config_file="config.json"):
             writable_parent = next(
                 (path for path in [output_dir, *output_dir.parents] if path.exists()), None
             )
-            add("output-dir", writable_parent is not None, str(output_dir), required=True)
+            add(
+                "output-dir",
+                writable_parent is not None and os.access(writable_parent, os.W_OK),
+                str(output_dir),
+                required=True,
+            )
+            for provider, settings in config.get("platforms", {}).items():
+                if not settings.get("enabled"):
+                    continue
+                if provider == "core":
+                    add(
+                        "provider-core-key",
+                        bool(settings.get("api_key")),
+                        "configured"
+                        if settings.get("api_key")
+                        else "missing BIBVERIFY_CORE_API_KEY",
+                        required=True,
+                    )
+                elif provider in {"openalex", "semantic_scholar", "pubmed"}:
+                    add(
+                        f"provider-{provider}-key",
+                        True,
+                        "configured" if settings.get("api_key") else "optional key not configured",
+                    )
         except (OSError, ValueError, json.JSONDecodeError) as exc:
             add("config-json", False, str(exc), required=True)
 

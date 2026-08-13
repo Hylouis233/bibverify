@@ -1,5 +1,4 @@
 import json
-import re
 import unittest
 from pathlib import Path
 
@@ -24,12 +23,17 @@ class PublishMetadataTests(unittest.TestCase):
 
         self.assertIn("mcp-name: io.github.Hylouis233/bibverify", readme)
 
-    def test_project_version_matches_package_version(self):
+    def test_project_uses_package_version_as_dynamic_source(self):
         pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
-        match = re.search(r'^version = "([^"]+)"$', pyproject, flags=re.MULTILINE)
 
-        self.assertIsNotNone(match)
-        self.assertEqual(match.group(1), bibverify.__version__)
+        self.assertIn('dynamic = ["version"]', pyproject)
+        self.assertIn('version = {attr = "bibverify._version.__version__"}', pyproject)
+
+    def test_generated_release_metadata_is_current(self):
+        from tools.sync_release_metadata import expected_server
+
+        actual = json.loads((ROOT / "server.json").read_text(encoding="utf-8"))
+        self.assertEqual(actual, expected_server())
 
     def test_clawhub_skill_has_required_frontmatter(self):
         skill = (ROOT / "clawhub" / "bibverify" / "SKILL.md").read_text(encoding="utf-8")

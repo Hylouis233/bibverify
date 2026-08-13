@@ -1,0 +1,16 @@
+{
+  "result": {
+    "uids": ["12345678"],
+    "12345678": {
+      "uid": "12345678",
+      "title": "Reliable Bibliographic Verification",
+      "authors": [{"name": "Lovelace A"}],
+      "pubdate": "2026 Jan",
+      "fulljournalname": "Journal of Metadata",
+      "articleids": [
+        {"idtype": "pubmed", "value": "12345678"},
+        {"idtype": "doi", "value": "10.1000/reliable"}
+      ]
+    }
+  }
+}

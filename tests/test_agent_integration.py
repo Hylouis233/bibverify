@@ -6,8 +6,10 @@ from contextlib import redirect_stdout
 from pathlib import Path
 from unittest.mock import patch
 
+import anyio
 import pytest
 from mcp import Client
+from mcp_types import LATEST_PROTOCOL_VERSION
 
 from bibverify.agent import build_mcp_config, build_skill_markdown, doctor, init_agent
 from bibverify.mcp_server import create_server, handle_request, run_stdio_server
@@ -52,6 +54,7 @@ class AgentIntegrationTests(unittest.TestCase):
         tools = handle_request({"jsonrpc": "2.0", "id": 2, "method": "tools/list"})
 
         self.assertEqual(initialize["result"]["serverInfo"]["name"], "bibverify")
+        self.assertEqual(initialize["result"]["protocolVersion"], LATEST_PROTOCOL_VERSION)
         self.assertTrue(any(tool["name"] == "doi_to_bibtex" for tool in tools["result"]["tools"]))
 
     def test_mcp_stdio_emits_json_lines(self):
@@ -118,6 +121,41 @@ async def test_official_mcp_sdk_lists_and_calls_tools():
         "verify_bib_file",
     } <= names
     assert result.structured_content["differences"]["title"]["original"] == "Old title"
+
+
+def test_mcp_rejects_config_outside_workspace(tmp_path):
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    outside = tmp_path / "outside.json"
+    outside.write_text("{}", encoding="utf-8")
+    server = create_server(workspace / "config.json", workspace_root=workspace)
+
+    async def call():
+        async with Client(server) as client:
+            return await client.call_tool(
+                "rank_lookup_sources",
+                {"title": "A title", "config_file": str(outside)},
+            )
+
+    result = anyio.run(call)
+    assert result.is_error
+    assert "workspace root" in result.content[0].text
+
+
+def test_mcp_rejects_config_that_points_outside_workspace(tmp_path):
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    config = workspace / "config.json"
+    config.write_text(json.dumps({"bib_file": str(tmp_path / "outside.bib")}), encoding="utf-8")
+    server = create_server(config, workspace_root=workspace)
+
+    async def call():
+        async with Client(server) as client:
+            return await client.call_tool("rank_lookup_sources", {"title": "A title"})
+
+    result = anyio.run(call)
+    assert result.is_error
+    assert "bib_file must stay" in result.content[0].text
 
 
 if __name__ == "__main__":

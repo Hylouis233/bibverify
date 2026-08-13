@@ -2,222 +2,245 @@
 
 from __future__ import annotations
 
+import csv
+import io
+import json
 import os
 import re
 import tempfile
+from collections import Counter
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 from bibtexparser.bibdatabase import BibDatabase
 
+from bibverify.merge import merge_entries
+from bibverify.models import EntryStatus
+
+RESULT_BUCKETS = (
+    "verified",
+    "updated",
+    "ambiguous",
+    "not_found",
+    "source_unavailable",
+    "identifier_conflict",
+    "invalid_input",
+    "errors",
+)
+REVIEW_BUCKETS = RESULT_BUCKETS[2:]
+
 
 class WorkflowMixin:
-    def check_all_entries(self):
-        total = len(self.db.entries)
-
-        for idx, entry in enumerate(self.db.entries, 1):
-            entry_key = entry["ID"]
-            title = entry.get("title", "")
-
+    def check_all_entries(self) -> None:
+        """Verify entries while keeping every non-equivalent outcome distinct."""
+        entries = self.db.entries if self.db else []
+        duplicate_keys = {
+            key
+            for key, count in Counter(entry.get("ID") for entry in entries).items()
+            if key and count > 1
+        }
+        for idx, entry in enumerate(entries, 1):
+            entry_key = str(entry.get("ID") or f"__missing_key_{idx}")
+            title = str(entry.get("title", ""))
             print(
-                f"\n{self.lang.get_text('checking_entry', current=idx, total=total, key=entry_key)}"
+                f"\n{self.lang.get_text('checking_entry', current=idx, total=len(entries), key=entry_key)}"
             )
             print(f"  {self.lang.get_text('original_title', title=self.clean_title(title))}")
 
-            query_result = self.query_multi_platform(title, entry)
+            if not entry.get("ID") or entry_key in duplicate_keys:
+                reason = (
+                    "Missing citation key." if not entry.get("ID") else "Duplicate citation key."
+                )
+                self.results["invalid_input"].append(
+                    self._entry_result(entry_key, title, entry, reason=reason, complete=False)
+                )
+                continue
 
-            if query_result:
-                platform = query_result[0]
+            outcome = self.query_multi_platform_result(title, entry)
+            common = self._entry_result(
+                entry_key,
+                title,
+                entry,
+                reason=outcome.reason,
+                complete=outcome.complete,
+                confidence=(outcome.best_candidate.confidence if outcome.best_candidate else None),
+                provider_status=[result.to_dict() for result in outcome.provider_results],
+                candidates=([outcome.best_candidate.to_dict()] if outcome.best_candidate else []),
+            )
 
-                if platform == "crossref":
-                    crossref_data = query_result[1]
-                    matched_title = crossref_data.get("title", [""])[0]
-                    print(f"  {self.lang.get_text('matched_title', title=matched_title)}")
-                    updated_entry = self.crossref_to_bibtex(crossref_data, entry_key)
-                elif platform == "arxiv":
-                    arxiv_entry = query_result[1]
-                    namespace = query_result[2]
-                    title_elem = arxiv_entry.find("atom:title", namespace)
-                    matched_title = (
-                        title_elem.text.strip().replace("\n", " ") if title_elem is not None else ""
-                    )
-                    print(f"  {self.lang.get_text('matched_title', title=matched_title)}")
-                    updated_entry = self.arxiv_to_bibtex(arxiv_entry, namespace, entry_key)
-                elif platform == "openalex":
-                    openalex_data = query_result[1]
-                    matched_title = openalex_data.get("title", "")
-                    print(f"  {self.lang.get_text('matched_title', title=matched_title)}")
-                    updated_entry = self.openalex_to_bibtex(openalex_data, entry_key)
-                elif platform == "semantic_scholar":
-                    ss_data = query_result[1]
-                    matched_title = ss_data.get("title", "")
-                    print(f"  {self.lang.get_text('matched_title', title=matched_title)}")
-                    updated_entry = self.semantic_scholar_to_bibtex(ss_data, entry_key)
-                elif platform == "dblp":
-                    dblp_data = query_result[1]
-                    matched_title = dblp_data.get("title", "")
-                    print(f"  {self.lang.get_text('matched_title', title=matched_title)}")
-                    updated_entry = self.dblp_to_bibtex(dblp_data, entry_key)
-                elif platform == "pubmed":
-                    pubmed_data = query_result[1]
-                    matched_title = pubmed_data.get("title", "")
-                    print(f"  {self.lang.get_text('matched_title', title=matched_title)}")
-                    updated_entry = self.pubmed_to_bibtex(pubmed_data, entry_key)
-                elif platform == "europe_pmc":
-                    epmc_data = query_result[1]
-                    matched_title = epmc_data.get("title", "")
-                    print(f"  {self.lang.get_text('matched_title', title=matched_title)}")
-                    updated_entry = self.europe_pmc_to_bibtex(epmc_data, entry_key)
-                elif platform == "core":
-                    core_data = query_result[1]
-                    matched_title = core_data.get("title", "")
-                    print(f"  {self.lang.get_text('matched_title', title=matched_title)}")
-                    updated_entry = self.core_to_bibtex(core_data, entry_key)
-                elif platform == "biorxiv":
-                    biorxiv_data = query_result[1]
-                    matched_title = biorxiv_data.get("title", "")
-                    print(f"  {self.lang.get_text('matched_title', title=matched_title)}")
-                    updated_entry = self.biorxiv_to_bibtex(biorxiv_data, entry_key)
-                elif platform == "google_scholar":
-                    bibtex_str = query_result[1]
-                    updated_entry = self.google_scholar_to_bibtex(bibtex_str, entry_key)
-                    matched_title = updated_entry.get("title", "").replace("{", "").replace("}", "")
-                    print(f"  {self.lang.get_text('matched_title', title=matched_title)}")
-                else:
-                    print(f"  {self.lang.get_text('unknown_platform', platform=platform)}")
-                    self.results["errors"].append(
-                        {
-                            "key": entry_key,
-                            "title": title,
-                            "entry": entry,
-                            "error": f"未知平台: {platform}",
-                        }
-                    )
-                    continue
+            bucket = {
+                EntryStatus.AMBIGUOUS: "ambiguous",
+                EntryStatus.NOT_FOUND: "not_found",
+                EntryStatus.SOURCE_UNAVAILABLE: "source_unavailable",
+                EntryStatus.IDENTIFIER_CONFLICT: "identifier_conflict",
+                EntryStatus.INVALID_INPUT: "invalid_input",
+            }.get(outcome.status)
+            if bucket:
+                common["status"] = outcome.status.value
+                self.results[bucket].append(common)
+                continue
 
-                differences = self.compare_entries(entry, updated_entry)
+            candidate = outcome.best_candidate
+            if candidate is None:
+                common.update(status=EntryStatus.SOURCE_UNAVAILABLE.value)
+                self.results["source_unavailable"].append(common)
+                continue
 
-                if differences:
-                    print(f"  {self.lang.get_text('need_update', count=len(differences))}")
-                    self.results["updated"].append(
-                        {
-                            "key": entry_key,
-                            "original": entry,
-                            "updated": updated_entry,
-                            "differences": differences,
-                            "platform": platform,
-                        }
-                    )
-                else:
-                    print(f"  {self.lang.get_text('verified_no_update')}")
-                    self.results["verified"].append(
-                        {"key": entry_key, "entry": entry, "platform": platform}
-                    )
+            threshold = float(
+                self.config.get("query_settings", {}).get("auto_update_threshold", 0.92)
+            )
+            merged = merge_entries(
+                entry,
+                candidate.entry,
+                source=candidate.provider,
+                confidence=candidate.confidence,
+                auto_update_threshold=threshold,
+            )
+            decisions = [decision.to_dict() for decision in merged.decisions]
+            meaningful = [
+                decision
+                for decision in decisions
+                if not decision["normalized_equal"] and decision["action"] != "keep_original"
+            ]
+            if meaningful:
+                common.update(
+                    status=EntryStatus.METADATA_MISMATCH.value,
+                    platform=candidate.provider,
+                    updated=merged.entry,
+                    differences=merged.differences,
+                    field_diffs=decisions,
+                )
+                self.results["updated"].append(common)
+                print(f"  {self.lang.get_text('need_update', count=len(meaningful))}")
             else:
-                print(f"  {self.lang.get_text('all_platforms_no_match')}")
-                self.results["not_found"].append({"key": entry_key, "title": title, "entry": entry})
+                common.update(
+                    status=EntryStatus.VERIFIED.value,
+                    platform=candidate.provider,
+                    field_diffs=decisions,
+                )
+                self.results["verified"].append(common)
+                print(f"  {self.lang.get_text('verified_no_update')}")
 
-    def generate_report(self):
-        output_settings = self.config.get("output_settings", {})
-        if not output_settings.get("generate_report", True):
+    @staticmethod
+    def _entry_result(
+        key: str,
+        title: str,
+        entry: dict[str, Any],
+        *,
+        reason: str,
+        complete: bool,
+        confidence: float | None = None,
+        provider_status: list[dict[str, Any]] | None = None,
+        candidates: list[dict[str, Any]] | None = None,
+    ) -> dict[str, Any]:
+        return {
+            "key": key,
+            "title": title,
+            "entry": entry,
+            "complete": complete,
+            "confidence": round(confidence, 4) if confidence is not None else None,
+            "reason": reason,
+            "candidates": candidates or [],
+            "provider_status": provider_status or [],
+        }
+
+    def _all_result_entries(self) -> list[dict[str, Any]]:
+        return [item for bucket in RESULT_BUCKETS for item in self.results.get(bucket, [])]
+
+    def _report_payload(self) -> dict[str, Any]:
+        counts = self._counts()
+        result_entries = self._all_result_entries()
+        complete = (
+            len(result_entries) == counts["total"]
+            and all(item.get("complete", False) for item in result_entries)
+            and not (counts["errors"] or counts["invalid_input"])
+        )
+        entries = []
+        for item in result_entries:
+            serialized = {
+                key: value
+                for key, value in item.items()
+                if key not in {"entry", "original", "updated"}
+            }
+            entries.append(serialized)
+        return {
+            "schema_version": "1.0",
+            "input": str(Path(self.bib_file).resolve()),
+            "generated_at": datetime.now().astimezone().isoformat(timespec="seconds"),
+            "complete": complete,
+            "counts": counts,
+            "entries": entries,
+        }
+
+    def generate_report(self) -> str | None:
+        settings = self.config.get("output_settings", {})
+        if not settings.get("generate_report", True) or self.dry_run:
             self.last_output_files["report"] = None
             return None
+        report_format = str(settings.get("report_format", "txt")).lower()
+        report_file = self.output_dir / f"bibverify_report_{self._timestamp()}.{report_format}"
+        payload = self._report_payload()
+        if report_format == "json":
+            content = json.dumps(payload, ensure_ascii=False, indent=2) + "\n"
+        elif report_format == "jsonl":
+            header = {key: value for key, value in payload.items() if key != "entries"}
+            rows = [{"type": "summary", **header}]
+            rows.extend({"type": "entry", **entry} for entry in payload["entries"])
+            content = "\n".join(json.dumps(row, ensure_ascii=False) for row in rows) + "\n"
+        elif report_format == "csv":
+            stream = io.StringIO(newline="")
+            fieldnames = ["key", "status", "complete", "confidence", "reason", "platform"]
+            writer = csv.DictWriter(stream, fieldnames=fieldnames, extrasaction="ignore")
+            writer.writeheader()
+            writer.writerows(payload["entries"])
+            content = stream.getvalue()
+        else:
+            content = self._text_report(payload)
+        self._atomic_write_text(report_file, content)
+        path = str(report_file.resolve())
+        self.last_output_files["report"] = path
+        print(f"\n{self.lang.get_text('report_generated', file=path)}")
+        return path
 
-        timestamp = self._timestamp()
-        report_file = self.output_dir / f"bib_check_report_{timestamp}.txt"
-        is_english = self.config.get("language") == "EN"
+    def _text_report(self, payload: dict[str, Any]) -> str:
+        english = self.config.get("language") == "EN"
         labels = {
-            "title": "BibTeX verification report" if is_english else "BibTeX 文献验证报告",
-            "generated": "Generated" if is_english else "生成时间",
-            "providers": "Enabled providers" if is_english else "启用平台",
-            "total": "Total" if is_english else "总计检查",
-            "verified": "Verified" if is_english else "验证通过",
-            "updated": "Updates proposed" if is_english else "建议更新",
-            "not_found": "Not found" if is_english else "未找到",
-            "errors": "Errors" if is_english else "错误",
-            "updates": "Proposed updates" if is_english else "建议更新的文献",
-            "missing": "References requiring manual review" if is_english else "需要手动检查的文献",
-            "failures": "Processing errors" if is_english else "处理错误",
-            "key": "Citation key" if is_english else "文献键值",
-            "source": "Source" if is_english else "数据来源",
-            "field_diff": "Field differences" if is_english else "字段差异",
-            "old": "Old" if is_english else "原值",
-            "new": "New" if is_english else "新值",
-            "entry_type": "Entry type" if is_english else "类型",
-            "error": "Error" if is_english else "错误信息",
-            "title_field": "Title" if is_english else "标题",
+            "title": "BibTeX verification report" if english else "BibTeX 书目元数据核验报告",
+            "complete": "Verification complete" if english else "核验是否完整",
+            "yes": "yes" if english else "是",
+            "no": "no" if english else "否",
+            "counts": "Counts" if english else "统计",
+            "entries": "Entries requiring attention" if english else "需要人工关注的条目",
         }
         lines = [
             "=" * 80,
             labels["title"],
-            f"{labels['generated']}: {datetime.now().astimezone().isoformat(timespec='seconds')}",
-            f"{labels['providers']}: {', '.join(p.upper() for p in self.enabled_platforms)}",
+            f"{labels['complete']}: {labels['yes'] if payload['complete'] else labels['no']}",
             "=" * 80,
-            "",
-            f"{labels['total']}: {len(self.db.entries)}",
-            f"{labels['verified']}: {len(self.results['verified'])}",
-            f"{labels['updated']}: {len(self.results['updated'])}",
-            f"{labels['not_found']}: {len(self.results['not_found'])}",
-            f"{labels['errors']}: {len(self.results['errors'])}",
-            "",
+            labels["counts"] + ":",
         ]
-
-        if self.results["updated"]:
-            lines.extend(["=" * 80, labels["updates"], "=" * 80, ""])
-            for item in self.results["updated"]:
-                lines.extend(
-                    [
-                        f"{labels['key']}: {item['key']}",
-                        f"{labels['title_field']}: {self.clean_title(item['original'].get('title', ''))}",
-                        f"{labels['source']}: {item.get('platform', 'unknown').upper()}",
-                        labels["field_diff"] + ":",
-                    ]
-                )
-                for field, diff in item["differences"].items():
-                    lines.extend(
-                        [
-                            f"  {field}:",
-                            f"    {labels['old']}: {diff['original']}",
-                            f"    {labels['new']}: {diff['updated']}",
-                        ]
+        lines.extend(f"  {key}: {value}" for key, value in payload["counts"].items())
+        lines.extend(["", labels["entries"] + ":"])
+        for entry in payload["entries"]:
+            if entry.get("status") == EntryStatus.VERIFIED.value:
+                continue
+            lines.extend(
+                [
+                    f"- {entry.get('key')}: {entry.get('status', 'unknown')}",
+                    f"  confidence: {entry.get('confidence')}",
+                    f"  reason: {entry.get('reason', '')}",
+                ]
+            )
+            for diff in entry.get("field_diffs", []):
+                if diff.get("action") != "keep_original":
+                    lines.append(
+                        f"  {diff['field']}: {diff['action']} ({diff['source']}, {diff['confidence']})"
                     )
-                lines.extend(["-" * 80, ""])
+        return "\n".join(lines) + "\n"
 
-        if self.results["not_found"]:
-            lines.extend(["=" * 80, labels["missing"], "=" * 80, ""])
-            for item in self.results["not_found"]:
-                lines.extend(
-                    [
-                        f"{labels['key']}: {item['key']}",
-                        f"{labels['title_field']}: {self.clean_title(item['title'])}",
-                        f"{labels['entry_type']}: {item['entry'].get('ENTRYTYPE', 'unknown')}",
-                        "-" * 80,
-                        "",
-                    ]
-                )
-
-        if self.results["errors"]:
-            lines.extend(["=" * 80, labels["failures"], "=" * 80, ""])
-            for item in self.results["errors"]:
-                lines.extend(
-                    [
-                        f"{labels['key']}: {item['key']}",
-                        f"{labels['title_field']}: {self.clean_title(item.get('title', ''))}",
-                        f"{labels['error']}: {item.get('error', 'unknown error')}",
-                        "-" * 80,
-                        "",
-                    ]
-                )
-
-        self._atomic_write_text(report_file, "\n".join(lines) + "\n")
-        report_path = str(report_file.resolve())
-        print(f"\n{self.lang.get_text('report_generated', file=report_path)}")
-        self.last_output_files["report"] = report_path
-        return report_path
-
-    def _output_prefix(self):
-        stem = Path(self.bib_file).stem
-        prefix = re.sub(r'[<>:"/\\|?*\x00-\x1f]+', "_", stem)
+    def _output_prefix(self) -> str:
+        prefix = re.sub(r'[<>:"/\\|?*\x00-\x1f]+', "_", Path(self.bib_file).stem)
         prefix = re.sub(r"\s+", "_", prefix).strip(" ._-")[:100]
         if prefix.upper() in {
             "CON",
@@ -230,20 +253,21 @@ class WorkflowMixin:
             prefix = f"_{prefix}"
         return prefix or "bibverify"
 
-    def _timestamp(self):
-        timestamp_format = self.config.get("output_settings", {}).get(
-            "timestamp_format", "%Y%m%d_%H%M%S"
+    def _timestamp(self) -> str:
+        return datetime.now().strftime(
+            self.config.get("output_settings", {}).get("timestamp_format", "%Y%m%d_%H%M%S")
         )
-        return datetime.now().strftime(timestamp_format)
 
-    def _atomic_write_text(self, path, content, *, newline=None):
+    def _atomic_write_text(
+        self, path: str | Path, content: str, *, newline: str | None = None, encoding: str = "utf-8"
+    ) -> None:
         path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)
         newline = self.output_newline if newline is None else newline
         normalized = content.replace("\r\n", "\n").replace("\r", "\n").replace("\n", newline)
         fd, temporary = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=path.parent)
         try:
-            with os.fdopen(fd, "w", encoding="utf-8", newline="") as stream:
+            with os.fdopen(fd, "w", encoding=encoding, newline="") as stream:
                 stream.write(normalized)
                 stream.flush()
                 os.fsync(stream.fileno())
@@ -255,7 +279,7 @@ class WorkflowMixin:
                 pass
             raise
 
-    def _atomic_write_bytes(self, path, content):
+    def _atomic_write_bytes(self, path: str | Path, content: bytes) -> None:
         path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)
         fd, temporary = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=path.parent)
@@ -272,143 +296,109 @@ class WorkflowMixin:
                 pass
             raise
 
-    def generate_updated_bib(self):
-        output_settings = self.config.get("output_settings", {})
+    def _merged_database(self) -> BibDatabase:
+        database = BibDatabase()
+        replacements = {
+            item["key"]: item["updated"]
+            for item in self.results["updated"]
+            if item.get("differences")
+        }
+        for original in self.db.entries if self.db else []:
+            database.entries.append(
+                self.clean_entry_for_writing(replacements.get(original.get("ID"), original))
+            )
+        return database
+
+    def generate_updated_bib(self) -> tuple[str | None, str | None]:
+        settings = self.config.get("output_settings", {})
+        self.last_output_files.setdefault("backup", None)
+        self.last_output_files.setdefault("updated", None)
+        self.last_output_files.setdefault("review", None)
+        self.last_output_files.setdefault("applied", None)
+        if self.dry_run:
+            return None, None
+
         timestamp = self._timestamp()
-        output_prefix = self._output_prefix()
-        backup_file = self.output_dir / f"{output_prefix}_backup_{timestamp}.bib"
-        updated_file = self.output_dir / f"{output_prefix}_updated_{timestamp}.bib"
-        wrong_file = self.output_dir / f"{output_prefix}_wrong_{timestamp}.bib"
+        prefix = self._output_prefix()
+        backup_file = self.output_dir / f"{prefix}_backup_{timestamp}.bib"
+        updated_file = self.output_dir / f"{prefix}_updated_{timestamp}.bib"
+        review_file = self.output_dir / f"{prefix}_review_{timestamp}.bib"
+        source_bytes = Path(self.bib_file).read_bytes()
 
-        if output_settings.get("generate_backup", True):
-            self._atomic_write_bytes(backup_file, Path(self.bib_file).read_bytes())
-            backup_path = str(backup_file.resolve())
-            print(f"\n{self.lang.get_text('backup_generated', file=backup_path)}")
-            self.last_output_files["backup"] = backup_path
-        else:
-            self.last_output_files["backup"] = None
-
-        updated_db = BibDatabase()
-        wrong_db = BibDatabase()
-
-        # The updated file is a complete, ready-to-use bibliography. Replace
-        # accepted entries in their original order and preserve every other
-        # source entry unchanged.
-        replacements = {item["key"]: item["updated"] for item in self.results["updated"]}
-        if self.db is not None:
-            for original in self.db.entries:
-                selected = replacements.get(original.get("ID"), original)
-                updated_db.entries.append(self.clean_entry_for_writing(selected))
-        else:
-            for item in self.results["updated"]:
-                updated_db.entries.append(self.clean_entry_for_writing(item["updated"]))
-
-        # 清理未找到条目中的 None 值
-        for item in self.results["not_found"]:
-            cleaned_entry = self.clean_entry_for_writing(item["entry"])
-            wrong_db.entries.append(cleaned_entry)
-
-        # 清理错误条目中的 None 值
-        for item in self.results["errors"]:
-            cleaned_entry = self.clean_entry_for_writing(item["entry"])
-            wrong_db.entries.append(cleaned_entry)
+        needs_backup = bool(settings.get("generate_backup", True) or self.apply_changes)
+        if needs_backup:
+            self._atomic_write_bytes(backup_file, source_bytes)
+            self.last_output_files["backup"] = str(backup_file.resolve())
 
         writer = self._create_bibtex_writer()
-
-        if self.results["updated"] and output_settings.get("generate_updated_bib", True):
-            content = writer.write(updated_db).replace("arXiv (Cornell University)", "arXiv")
-            self._atomic_write_text(updated_file, content)
-            updated_path = str(updated_file.resolve())
-            print(f"{self.lang.get_text('updated_generated', file=updated_path)}")
-            print(
-                f"      {self.lang.get_text('updated_count', count=len(self.results['updated']))}"
+        merged_content = writer.write(self._merged_database()).replace(
+            "arXiv (Cornell University)", "arXiv"
+        )
+        has_applied_updates = any(item.get("differences") for item in self.results["updated"])
+        if has_applied_updates and settings.get("generate_updated_bib", True):
+            self._atomic_write_text(updated_file, merged_content)
+            self.last_output_files["updated"] = str(updated_file.resolve())
+        if self.apply_changes and has_applied_updates:
+            self._atomic_write_text(
+                self.bib_file,
+                merged_content,
+                encoding=self.file_encoding,
             )
-            self.last_output_files["updated"] = updated_path
-        else:
-            print(self.lang.get_text("no_update_skip"))
-            self.last_output_files["updated"] = None
+            self.last_output_files["applied"] = str(Path(self.bib_file).resolve())
 
-        has_wrong = bool(self.results["not_found"] or self.results["errors"])
-        if has_wrong and output_settings.get("generate_wrong_bib", True):
-            content = writer.write(wrong_db).replace("arXiv (Cornell University)", "arXiv")
-            self._atomic_write_text(wrong_file, content)
-            wrong_path = str(wrong_file.resolve())
-            print(f"{self.lang.get_text('wrong_generated', file=wrong_path)}")
-            print(
-                f"      {self.lang.get_text('wrong_count', not_found=len(self.results['not_found']), errors=len(self.results['errors']))}"
-            )
-            self.last_output_files["wrong"] = wrong_path
-        else:
-            print(self.lang.get_text("no_wrong_skip"))
-            self.last_output_files["wrong"] = None
+        review_db = BibDatabase()
+        for bucket in REVIEW_BUCKETS:
+            for item in self.results.get(bucket, []):
+                if item.get("entry"):
+                    review_db.entries.append(self.clean_entry_for_writing(item["entry"]))
+        if review_db.entries and settings.get(
+            "generate_review_bib", settings.get("generate_wrong_bib", True)
+        ):
+            review_content = writer.write(review_db).replace("arXiv (Cornell University)", "arXiv")
+            self._atomic_write_text(review_file, review_content)
+            self.last_output_files["review"] = str(review_file.resolve())
+        # v0.3 compatibility key; the new name avoids calling an unverified entry "wrong".
+        self.last_output_files["wrong"] = self.last_output_files["review"]
+        return self.last_output_files["updated"], self.last_output_files["review"]
 
-        return self.last_output_files["updated"], self.last_output_files["wrong"]
+    def _counts(self) -> dict[str, int]:
+        counts = {bucket: len(self.results.get(bucket, [])) for bucket in RESULT_BUCKETS}
+        counts["total"] = len(self.db.entries) if self.db else 0
+        return {"total": counts.pop("total"), **counts}
 
-    def get_run_summary(self):
+    def get_run_summary(self) -> dict[str, Any]:
+        payload = self._report_payload()
         return {
-            "bib_file": self.bib_file,
+            "schema_version": payload["schema_version"],
+            "bib_file": str(Path(self.bib_file).resolve()),
             "config_file": str(self.config_file),
             "output_dir": str(self.output_dir.resolve()),
             "encoding": self.file_encoding,
-            "counts": {
-                "total": len(self.db.entries) if self.db else 0,
-                "verified": len(self.results["verified"]),
-                "updated": len(self.results["updated"]),
-                "not_found": len(self.results["not_found"]),
-                "errors": len(self.results["errors"]),
-            },
+            "complete": payload["complete"],
+            "dry_run": self.dry_run,
+            "applied": bool(self.last_output_files.get("applied")),
+            "counts": payload["counts"],
+            "entries": payload["entries"],
             "files": dict(self.last_output_files),
         }
 
-    def run(self):
+    def run(self) -> dict[str, Any]:
         print("=" * 80)
         print(self.lang.get_text("tool_title"))
         print(
             self.lang.get_text(
                 "enabled_platforms",
                 count=len(self.enabled_platforms),
-                platforms=", ".join([p.upper() for p in self.enabled_platforms]),
+                platforms=", ".join(platform.upper() for platform in self.enabled_platforms),
             )
         )
         print("=" * 80)
-
         self.load_bib_file()
-
-        print(f"\n{self.lang.get_text('start_verification')}")
         self.check_all_entries()
-
         print("\n" + "=" * 80)
         print(self.lang.get_text("verification_complete"))
-        print("=" * 80)
-        print(f"\n{self.lang.get_text('total_checked', count=len(self.db.entries))}")
-        print(f"{self.lang.get_text('verified_passed', count=len(self.results['verified']))}")
-        print(f"{self.lang.get_text('need_update_count', count=len(self.results['updated']))}")
-        print(f"{self.lang.get_text('not_found_count', count=len(self.results['not_found']))}")
-        if self.results["errors"]:
-            print(f"{self.lang.get_text('errors_count', count=len(self.results['errors']))}")
-
-        if self.results["verified"]:
-            platforms = {}
-            for item in self.results["verified"]:
-                platform = item.get("platform", "unknown")
-                platforms[platform] = platforms.get(platform, 0) + 1
-            print(f"\n{self.lang.get_text('verified_sources')}")
-            for platform, count in platforms.items():
-                print(f"  {platform.upper()}: {count} 条")
-
-        if self.results["updated"]:
-            platforms = {}
-            for item in self.results["updated"]:
-                platform = item.get("platform", "unknown")
-                platforms[platform] = platforms.get(platform, 0) + 1
-            print(f"\n{self.lang.get_text('update_sources')}")
-            for platform, count in platforms.items():
-                print(f"  {platform.upper()}: {count} 条")
-
-        print("\n" + "=" * 80)
-        print(self.lang.get_text("generating_files"))
-        print("=" * 80)
-
+        for status, count in self._counts().items():
+            print(f"  {status}: {count}")
         self.generate_report()
         self.generate_updated_bib()
         return self.get_run_summary()

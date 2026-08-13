@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "bibverify"
-version = "0.3.0"
+dynamic = ["version"]
 description = "Verify, repair, and enrich BibTeX references across academic metadata providers"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -34,8 +34,11 @@ dependencies = [
 google-scholar = ["scholarly>=1.7,<2"]
 dev = [
   "build>=1.3,<2",
+  "cyclonedx-bom>=7.1,<8",
   "mypy>=1.17,<2",
+  "pip-audit>=2.9,<3",
   "pyinstaller>=6.16,<7",
+  "PyYAML>=6.0.2,<7",
   "pytest>=8.4,<10",
   "pytest-cov>=6.2,<8",
   "requests-mock>=1.12,<2",
@@ -58,19 +61,26 @@ bibverify = "bibverify.cli:main"
 package-dir = {"" = "src"}
 py-modules = ["bib_check"]
 
+[tool.setuptools.dynamic]
+version = {attr = "bibverify._version.__version__"}
+
+[tool.setuptools.package-data]
+"bibverify.data" = ["*.json"]
+
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.pytest.ini_options]
 addopts = "--strict-config --strict-markers"
 testpaths = ["tests"]
+markers = ["live: scheduled network contract tests, skipped during normal CI"]
 
 [tool.coverage.run]
 branch = true
 source = ["src/bibverify"]
 
 [tool.coverage.report]
-fail_under = 30
+fail_under = 60
 show_missing = true
 skip_covered = true
 
@@ -99,7 +109,10 @@ files = [
   "src/bibverify/config.py",
   "src/bibverify/http.py",
   "src/bibverify/i18n.py",
-  "src/bibverify/providers.py",
+  "src/bibverify/models.py",
+  "src/bibverify/identifiers.py",
+  "src/bibverify/matching.py",
+  "src/bibverify/merge.py",
   "src/bibverify/cli.py",
   "src/bibverify/mcp_server.py",
 ]
@@ -120,6 +133,7 @@ module = [
   "bibverify.bibtex",
   "bibverify.checker",
   "bibverify.provider_queries",
+  "bibverify.providers.*",
   "bibverify.workflow",
 ]
 check_untyped_defs = true

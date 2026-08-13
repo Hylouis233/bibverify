@@ -91,14 +91,18 @@ class BibTeXMixin:
                 ss_data["journal"]["name"], protect_case=True
             )
 
-        if ss_data.get("doi"):
-            entry["doi"] = ss_data["doi"]
-
         if "externalIds" in ss_data:
-            ext_ids = ss_data["externalIds"]
+            ext_ids = ss_data["externalIds"] or {}
+            doi = ss_data.get("doi") or ext_ids.get("DOI")
+            if doi:
+                entry["doi"] = doi
             if "ArXiv" in ext_ids:
                 entry["eprint"] = ext_ids["ArXiv"]
                 entry["archiveprefix"] = "arXiv"
+            if ext_ids.get("PubMed"):
+                entry["pmid"] = str(ext_ids["PubMed"])
+        elif ss_data.get("doi"):
+            entry["doi"] = ss_data["doi"]
 
         return self.clean_entry(entry)
 
@@ -197,6 +201,8 @@ class BibTeXMixin:
                     entry["doi"] = article_id.get("value", "")
                 elif article_id.get("idtype") == "pubmed":
                     entry["pmid"] = article_id.get("value", "")
+                elif article_id.get("idtype") in {"pmc", "pmcid"}:
+                    entry["pmcid"] = article_id.get("value", "")
 
         return self.clean_entry(entry)
 
@@ -231,6 +237,9 @@ class BibTeXMixin:
 
         if "pmid" in epmc_data:
             entry["pmid"] = epmc_data["pmid"]
+
+        if "pmcid" in epmc_data:
+            entry["pmcid"] = epmc_data["pmcid"]
 
         return self.clean_entry(entry)
 
@@ -293,7 +302,6 @@ class BibTeXMixin:
         if arxiv_id_elem is not None:
             arxiv_url = arxiv_id_elem.text.strip()
             arxiv_id = arxiv_url.split("/")[-1]
-            arxiv_id_base = re.sub(r"v\d+$", "", arxiv_id)
             entry["eprint"] = arxiv_id
             entry["archiveprefix"] = "arXiv"
 
@@ -314,9 +322,10 @@ class BibTeXMixin:
         doi_elem = arxiv_entry.find("arxiv:doi", {"arxiv": "http://arxiv.org/schemas/atom"})
         if doi_elem is not None and doi_elem.text:
             entry["doi"] = doi_elem.text.strip()
-        elif arxiv_id:
-            arxiv_id_base = re.sub(r"v\d+$", "", arxiv_id)
-            entry["doi"] = f"10.48550/arxiv.{arxiv_id_base}"
+        # Do not synthesize a 10.48550 DOI when the feed has no DOI. A user
+        # entry may already carry the distinct DOI of the published version;
+        # replacing it with the preprint resolver would create a false
+        # identifier conflict and lose useful publication metadata.
 
         return self.clean_entry(entry)
 
@@ -378,8 +387,9 @@ class BibTeXMixin:
             doi = openalex_data["doi"].replace("https://doi.org/", "")
             entry["doi"] = doi
 
-        if "host_organization" in openalex_data and openalex_data.get("host_organization"):
-            entry["publisher"] = openalex_data["host_organization"].get("display_name", "")
+        host_organization = openalex_data.get("host_organization")
+        if isinstance(host_organization, dict) and host_organization.get("display_name"):
+            entry["publisher"] = host_organization["display_name"]
 
         return self.clean_entry(entry)
 
@@ -453,7 +463,10 @@ class BibTeXMixin:
 
         if biorxiv_data.get("authors"):
             authors = []
-            for author in biorxiv_data["authors"]:
+            raw_authors = biorxiv_data["authors"]
+            if isinstance(raw_authors, str):
+                raw_authors = [name.strip() for name in raw_authors.split(";")]
+            for author in raw_authors:
                 if isinstance(author, dict):
                     name = author.get("name", "")
                 else:

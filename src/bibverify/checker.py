@@ -13,9 +13,11 @@ import bibtexparser
 from bibtexparser.bparser import BibTexParser
 
 from bibverify.bibtex import BibTeXMixin
+from bibverify.cache import ResponseCache
 from bibverify.config import DEFAULT_CONFIG, deep_merge, load_config
 from bibverify.http import ResilientSession
 from bibverify.i18n import LanguageSupport
+from bibverify.identifiers import extract_identifiers
 from bibverify.provider_queries import ProviderQueriesMixin
 from bibverify.providers import build_provider_registry
 from bibverify.workflow import WorkflowMixin
@@ -24,7 +26,15 @@ __all__ = ["BibTeXChecker", "LanguageSupport"]
 
 
 class BibTeXChecker(ProviderQueriesMixin, BibTeXMixin, WorkflowMixin):
-    def __init__(self, config_file="config.json", *, overrides=None, http_client=None):
+    def __init__(
+        self,
+        config_file="config.json",
+        *,
+        overrides=None,
+        http_client=None,
+        dry_run=False,
+        apply_changes=False,
+    ):
         self.config_file = Path(config_file).expanduser().resolve(strict=False)
         self.config = self.load_config(config_file, overrides=overrides)
         self.bib_file = self.config.get("bib_file", "references.bib")
@@ -32,8 +42,12 @@ class BibTeXChecker(ProviderQueriesMixin, BibTeXMixin, WorkflowMixin):
         self.file_encoding = "utf-8"
         self.output_newline = "\n"
         self.db = None
-        self.results = {"verified": [], "updated": [], "not_found": [], "errors": []}
+        self.results = self._empty_results()
         self.last_output_files = {}
+        self.dry_run = bool(dry_run)
+        self.apply_changes = bool(apply_changes)
+        if self.dry_run and self.apply_changes:
+            raise ValueError("dry_run and apply_changes are mutually exclusive.")
         self.user_email = self.config.get("user_info", {}).get("email", "research@example.com")
         self.app_name = self.config.get("user_info", {}).get("app_name", "Bibverify")
         self.enabled_platforms = self._get_enabled_platforms()
@@ -42,14 +56,41 @@ class BibTeXChecker(ProviderQueriesMixin, BibTeXMixin, WorkflowMixin):
         self.lang = LanguageSupport(language)
 
         query = self.config.get("query_settings", {})
+        response_cache = None
+        if query.get("cache_enabled", True) and not self.dry_run:
+            response_cache = ResponseCache(
+                query["cache_path"],
+                ttl_seconds=float(query.get("cache_ttl_hours", 168)) * 3600,
+            )
         self.http = http_client or ResilientSession(
-            timeout=float(query.get("timeout", 10)),
+            timeout=(
+                float(query.get("connect_timeout", 3.05)),
+                float(query.get("read_timeout", query.get("timeout", 20))),
+            ),
             max_retries=int(query.get("max_retries", 3)),
             backoff_factor=float(query.get("backoff_factor", 0.5)),
             min_interval=float(query.get("delay_between_requests", 0.5)),
             user_agent=f"{self.app_name}/0.3 (mailto:{self.user_email})",
+            cache=response_cache,
         )
         self.provider_registry = build_provider_registry(self)
+
+    @staticmethod
+    def _empty_results():
+        return {
+            "verified": [],
+            "updated": [],
+            "ambiguous": [],
+            "not_found": [],
+            "source_unavailable": [],
+            "identifier_conflict": [],
+            "invalid_input": [],
+            "errors": [],
+        }
+
+    @staticmethod
+    def extract_identifiers(entry):
+        return extract_identifiers(entry)
 
     def load_config(self, config_file, *, overrides=None):
         config, resolved_path = load_config(config_file, overrides=overrides)
@@ -229,11 +270,12 @@ class BibTeXChecker(ProviderQueriesMixin, BibTeXMixin, WorkflowMixin):
         return score >= threshold
 
     def canonicalize_doi(self, doi):
+        # Preserve the user's DOI case for the public v0.2 API. Internal
+        # identifier comparisons use ``identifiers.canonicalize_doi`` and are
+        # deliberately case-insensitive.
         if not doi:
             return ""
-        doi = self.clean_title(str(doi)).strip()
-        doi = doi.strip("{}").strip()
-        doi = re.sub(r"^doi\s*:\s*", "", doi, flags=re.IGNORECASE)
-        doi = re.sub(r"^https?://(?:dx\.)?doi\.org/", "", doi, flags=re.IGNORECASE)
-        doi = doi.strip().strip(".,;")
-        return doi
+        value = self.clean_title(str(doi)).strip().strip("{}").strip()
+        value = re.sub(r"^doi\s*:\s*", "", value, flags=re.IGNORECASE)
+        value = re.sub(r"^https?://(?:dx\.)?doi\.org/", "", value, flags=re.IGNORECASE)
+        return value.strip().strip(".,;")

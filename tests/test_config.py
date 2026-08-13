@@ -49,6 +49,7 @@ def test_utf8_bom_config_and_validation(tmp_path):
 
     assert config["language"] == "EN"
     assert config["query_settings"]["timeout"] == 12
+    assert config["query_settings"]["read_timeout"] == 12
 
 
 def test_create_config_will_not_overwrite_without_force(tmp_path):

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xmlns:arxiv="http://arxiv.org/schemas/atom">
+  <entry>
+    <id>https://arxiv.org/abs/2601.00001v1</id>
+    <updated>2026-01-02T00:00:00Z</updated>
+    <published>2026-01-01T00:00:00Z</published>
+    <title>Reliable Bibliographic Verification</title>
+    <author><name>Ada Lovelace</name></author>
+    <arxiv:primary_category term="cs.DL" />
+  </entry>
+</feed>

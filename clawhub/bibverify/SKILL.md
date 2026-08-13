@@ -52,7 +52,8 @@ pip install -U bibverify
 ## Safety
 
 - Do not silently overwrite the source `.bib` file.
-- Tell the user that Bibverify writes timestamped backup, updated, and problem-entry files using the input `.bib` filename stem.
+- Tell the user that normal verification writes timestamped reports, byte-preserving backups, updated proposals, and manual-review files using the input `.bib` filename stem. Only an explicit `--apply` changes the source.
+- Distinguish a genuine `not_found` result from `source_unavailable`, and never describe an unindexed reference as fake or fabricated without independent evidence.
 - Do not invent missing bibliographic metadata. Use Bibverify results and explain uncertainty when sources disagree.
 - Do not expose API keys or local config secrets in the answer.
 

@@ -8,6 +8,7 @@ on:
 
 jobs:
   publish:
+    environment: mcp-registry
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -15,20 +16,36 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: "3.14"
 
       - name: Verify registry metadata
         run: |
-          python -m pip install -e .
-          python -m pytest tests/test_publish_metadata.py
+          python -m pip install -e ".[dev]"
+          python -m ruff check src tests tools bib_check.py
+          python -m ruff format --check src tests tools bib_check.py
+          python -m mypy
+          python -m pytest
+          python -m bibverify benchmark
+          python -m pip_audit . --strict
+          python tools/sync_release_metadata.py --check
+          python tools/validate_project.py
+      - name: Verify tag matches package version
+        if: startsWith(github.ref, 'refs/tags/')
+        run: test "${GITHUB_REF_NAME}" = "v$(python -c 'from bibverify import __version__; print(__version__)')"
 
-      - name: Install mcp-publisher
+      - name: Install verified mcp-publisher v1.7.9
+        env:
+          MCP_PUBLISHER_URL: https://github.com/modelcontextprotocol/registry/releases/download/v1.7.9/mcp-publisher_linux_amd64.tar.gz
+          MCP_PUBLISHER_SHA256: ab128162b0616090b47cf245afe0a23f3ef08936fdce19074f5ba0a4469281ac
         run: |
-          curl -L "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/').tar.gz" | tar xz mcp-publisher
+          curl --fail --location --proto '=https' --tlsv1.2 "$MCP_PUBLISHER_URL" --output mcp-publisher.tar.gz
+          echo "$MCP_PUBLISHER_SHA256  mcp-publisher.tar.gz" | sha256sum --check --strict
+          tar --extract --gzip --file mcp-publisher.tar.gz mcp-publisher
+          ./mcp-publisher --help >/dev/null
 
       - name: Authenticate to MCP Registry
         run: ./mcp-publisher login github-oidc
