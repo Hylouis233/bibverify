@@ -9,33 +9,54 @@ on:
         description: Existing tag to rebuild and upload (for release recovery)
         required: false
         type: string
+      target:
+        description: Build one target for diagnostics, or all release targets
+        required: false
+        default: all
+        type: choice
+        options:
+          - all
+          - windows-x64
+          - macos-x64
+          - macos-arm64
+          - linux-x64
+          - linux-arm64
 
 permissions:
   contents: read
 
 jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+    steps:
+      - name: Select build matrix
+        id: matrix
+        shell: bash
+        env:
+          TARGET: ${{ inputs.target || 'all' }}
+        run: |
+          case "${TARGET}" in
+            all)
+              MATRIX='{"include":[{"target":"windows-x64","runner":"windows-latest","python_arch":"x64"},{"target":"macos-x64","runner":"macos-15-intel","python_arch":"x64"},{"target":"macos-arm64","runner":"macos-latest","python_arch":"arm64"},{"target":"linux-x64","runner":"ubuntu-latest","python_arch":"x64"},{"target":"linux-arm64","runner":"ubuntu-24.04-arm","python_arch":"arm64"}]}'
+              ;;
+            windows-x64) MATRIX='{"include":[{"target":"windows-x64","runner":"windows-latest","python_arch":"x64"}]}' ;;
+            macos-x64) MATRIX='{"include":[{"target":"macos-x64","runner":"macos-15-intel","python_arch":"x64"}]}' ;;
+            macos-arm64) MATRIX='{"include":[{"target":"macos-arm64","runner":"macos-latest","python_arch":"arm64"}]}' ;;
+            linux-x64) MATRIX='{"include":[{"target":"linux-x64","runner":"ubuntu-latest","python_arch":"x64"}]}' ;;
+            linux-arm64) MATRIX='{"include":[{"target":"linux-arm64","runner":"ubuntu-24.04-arm","python_arch":"arm64"}]}' ;;
+            *) echo "Unsupported target: ${TARGET}" >&2; exit 1 ;;
+          esac
+          echo "matrix=${MATRIX}" >> "${GITHUB_OUTPUT}"
+
   build:
     name: ${{ matrix.target }} standalone
+    needs: prepare
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - target: windows-x64
-            runner: windows-latest
-            python_arch: x64
-          - target: macos-x64
-            runner: macos-15-intel
-            python_arch: x64
-          - target: macos-arm64
-            runner: macos-latest
-            python_arch: arm64
-          - target: linux-x64
-            runner: ubuntu-latest
-            python_arch: x64
-          - target: linux-arm64
-            runner: ubuntu-24.04-arm
-            python_arch: arm64
+      matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
@@ -72,7 +93,9 @@ jobs:
 
   windows-arm64-emulation:
     name: windows-arm64 x64 compatibility
-    if: always() && needs.build.result != 'cancelled'
+    if: >-
+      always() && needs.build.result != 'cancelled' &&
+      (inputs.target == '' || inputs.target == 'all' || inputs.target == 'windows-x64')
     needs: build
     runs-on: windows-11-arm
     steps:
@@ -88,7 +111,9 @@ jobs:
           & $executable.FullName --version
 
   release:
-    if: startsWith(github.ref, 'refs/tags/') || inputs.release_tag != ''
+    if: >-
+      (startsWith(github.ref, 'refs/tags/') || inputs.release_tag != '') &&
+      (inputs.target == '' || inputs.target == 'all')
     needs: [build, windows-arm64-emulation]
     runs-on: ubuntu-latest
     permissions:
