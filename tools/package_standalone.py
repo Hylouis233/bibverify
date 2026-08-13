@@ -56,9 +56,7 @@ def main() -> int:
             print(completed.stdout, end="", file=sys.stdout)
         if completed.stderr:
             print(completed.stderr, end="", file=sys.stderr)
-        raise RuntimeError(
-            f"Standalone smoke test failed with exit code {completed.returncode}"
-        )
+        raise RuntimeError(f"Standalone smoke test failed with exit code {completed.returncode}")
     if completed.stdout.strip() != package_version:
         raise RuntimeError(f"Unexpected standalone version: {completed.stdout!r}")
 
