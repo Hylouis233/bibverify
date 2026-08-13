@@ -43,7 +43,7 @@ dev = [
   "pytest-cov>=6.2,<8",
   "requests-mock>=1.12,<2",
   "ruff>=0.12,<1",
-  "twine>=6.1,<7",
+  "twine>=6.1,<8",
   "types-requests>=2.32,<3",
 ]
 
