@@ -133,7 +133,9 @@ class BibTeXChecker(ProviderQueriesMixin, BibTeXMixin, WorkflowMixin):
         if not raw_url:
             return False
 
-        parsed = urlsplit(raw_url if "://" in raw_url or raw_url.startswith("//") else f"//{raw_url}")
+        parsed = urlsplit(
+            raw_url if "://" in raw_url or raw_url.startswith("//") else f"//{raw_url}"
+        )
         hostname = (parsed.hostname or "").lower().rstrip(".")
         return hostname == "arxiv.org" or hostname.endswith(".arxiv.org")
 
