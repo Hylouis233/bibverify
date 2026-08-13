@@ -23,23 +23,57 @@ def expected_server() -> dict:
     version = source_version()
     server["version"] = version
     for package in server.get("packages", []):
-        if package.get("registryType") == "pypi":
+        if package.get("registryType") in {"pypi", "npm"}:
             package["version"] = version
+        if package.get("registryType") == "oci":
+            package["identifier"] = f"ghcr.io/hylouis233/bibverify:{version}"
     return server
+
+
+def expected_npm_package() -> dict:
+    path = ROOT / "npm" / "package.json"
+    package = json.loads(path.read_text(encoding="utf-8"))
+    package["version"] = source_version()
+    return package
+
+
+def expected_npm_lock() -> dict:
+    path = ROOT / "npm" / "package-lock.json"
+    lock = json.loads(path.read_text(encoding="utf-8"))
+    version = source_version()
+    lock["version"] = version
+    lock["packages"][""]["version"] = version
+    return lock
 
 
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--check", action="store_true", help="Fail if generated metadata is stale.")
     args = parser.parse_args()
-    path = ROOT / "server.json"
-    expected = json.dumps(expected_server(), ensure_ascii=False, indent=2) + "\n"
-    current = path.read_text(encoding="utf-8")
+    generated = {
+        ROOT / "server.json": expected_server(),
+        ROOT / "npm" / "package.json": expected_npm_package(),
+        ROOT / "npm" / "package-lock.json": expected_npm_lock(),
+    }
     if args.check:
-        if current != expected:
-            raise SystemExit("server.json is stale; run tools/sync_release_metadata.py")
+        stale = [
+            str(path.relative_to(ROOT))
+            for path, payload in generated.items()
+            if path.read_text(encoding="utf-8")
+            != json.dumps(payload, ensure_ascii=False, indent=2) + "\n"
+        ]
+        if stale:
+            raise SystemExit(
+                f"Generated metadata is stale ({', '.join(stale)}); "
+                "run tools/sync_release_metadata.py"
+            )
         return 0
-    path.write_text(expected, encoding="utf-8")
+    for path, payload in generated.items():
+        path.write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+            newline="\n",
+        )
     return 0
 
 

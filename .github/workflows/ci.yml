@@ -14,6 +14,26 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  channels:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: npm/package-lock.json
+      - name: Test npm launcher
+        working-directory: npm
+        run: |
+          npm ci
+          npm test
+          npm pack --dry-run
+      - name: Validate Dockerfile build
+        run: docker build --tag bibverify:ci .
+      - name: Smoke-test container CLI
+        run: docker run --rm bibverify:ci --version
+
   quality:
     runs-on: ubuntu-latest
     steps:

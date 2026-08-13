@@ -1,0 +1,42 @@
+{
+  "name": "@hylouis233/bibverify",
+  "version": "0.4.0",
+  "description": "Cross-platform BibTeX verification CLI and MCP server",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "bibverify": "bin/bibverify.js"
+  },
+  "files": [
+    "bin",
+    "lib",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "mcpName": "io.github.Hylouis233/bibverify",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Hylouis233/bibverify.git",
+    "directory": "npm"
+  },
+  "homepage": "https://github.com/Hylouis233/bibverify#readme",
+  "bugs": {
+    "url": "https://github.com/Hylouis233/bibverify/issues"
+  },
+  "keywords": [
+    "bibtex",
+    "bibliography",
+    "citation-verification",
+    "mcp",
+    "research"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "test": "node --test",
+    "pack:check": "npm pack --dry-run"
+  }
+}

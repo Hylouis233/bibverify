@@ -16,7 +16,12 @@ MARKDOWN_LINK = re.compile(r"\[[^\]]+\]\(([^)]+)\)")
 
 
 def validate_json() -> None:
-    paths = [ROOT / "server.json", ROOT / "config_template.json"]
+    paths = [
+        ROOT / "server.json",
+        ROOT / "config_template.json",
+        ROOT / "npm" / "package.json",
+        ROOT / "npm" / "package-lock.json",
+    ]
     paths.extend((ROOT / "benchmarks").glob("*.json"))
     paths.extend((ROOT / "tests" / "fixtures").rglob("*.json"))
     paths.extend((ROOT / "src" / "bibverify" / "data").glob("*.json"))
@@ -49,7 +54,7 @@ def validate_action_pins() -> None:
 
 
 def validate_markdown_links() -> None:
-    for path in (ROOT / "README.md", ROOT / "README_EN.md"):
+    for path in (ROOT / "README.md", ROOT / "README_CN.md", ROOT / "npm" / "README.md"):
         for target in MARKDOWN_LINK.findall(path.read_text(encoding="utf-8")):
             target = target.strip().split("#", 1)[0]
             if not target or "://" in target or target.startswith("#"):

@@ -1,8 +1,11 @@
 include server.json
-include README_EN.md
+include README_CN.md
 include config_template.json
+include Dockerfile
 recursive-include clawhub *.md
 recursive-include benchmarks *.json
+recursive-include npm *.js *.json *.md
 recursive-include tests/fixtures *.json *.xml
+include tools/generate_channel_metadata.py
 include tools/sync_release_metadata.py
 include tools/validate_project.py

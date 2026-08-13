@@ -1,0 +1,80 @@
+name: Publish to npm
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Existing tag to publish (for release recovery)
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    environment: npm
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.release_tag || github.ref }}
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: "24"
+          registry-url: https://registry.npmjs.org
+          cache: npm
+          cache-dependency-path: npm/package-lock.json
+      - name: Install and test launcher
+        working-directory: npm
+        run: |
+          npm ci
+          npm test
+          npm pack --dry-run
+      - name: Verify release version
+        env:
+          RELEASE_TAG: ${{ inputs.release_tag || github.ref_name }}
+        working-directory: npm
+        run: test "${RELEASE_TAG}" = "v$(node --print "require('./package.json').version")"
+      - name: Wait for and verify native release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ inputs.release_tag || github.ref_name }}
+        run: |
+          VERSION=${RELEASE_TAG#v}
+          mkdir release-check
+          for attempt in {1..30}; do
+            rm -f release-check/*
+            if gh release download "${RELEASE_TAG}" --repo "${GH_REPO}" --dir release-check \
+                --pattern SHA256SUMS \
+                --pattern "bibverify-${VERSION}-windows-x64.exe" \
+                --pattern "bibverify-${VERSION}-macos-x64" \
+                --pattern "bibverify-${VERSION}-macos-arm64" \
+                --pattern "bibverify-${VERSION}-linux-x64" \
+                --pattern "bibverify-${VERSION}-linux-arm64" \
+              && (cd release-check && sha256sum --ignore-missing --check SHA256SUMS) \
+              && [ "$(find release-check -maxdepth 1 -type f | wc -l)" -eq 6 ]; then
+              exit 0
+            fi
+            if [ "$attempt" -eq 30 ]; then
+              echo "Native release assets were not ready after ${attempt} attempts."
+              exit 1
+            fi
+            echo "Waiting for native release assets (${attempt}/30)."
+            sleep 30
+          done
+      - name: Publish with npm Trusted Publishing
+        working-directory: npm
+        run: |
+          PACKAGE_VERSION=$(node --print "require('./package.json').version")
+          if npm view "@hylouis233/bibverify@${PACKAGE_VERSION}" version >/dev/null 2>&1; then
+            echo "@hylouis233/bibverify@${PACKAGE_VERSION} is already published."
+          else
+            npm publish --access public --provenance
+          fi
