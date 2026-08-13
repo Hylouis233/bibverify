@@ -15,7 +15,7 @@ after(async () =>
 
 test("maps every published operating system and architecture", () => {
   assert.equal(assetName("0.4.0", "win32", "x64"), "bibverify-0.4.0-windows-x64.exe");
-  assert.equal(assetName("0.4.0", "win32", "arm64"), "bibverify-0.4.0-windows-arm64.exe");
+  assert.equal(assetName("0.4.0", "win32", "arm64"), "bibverify-0.4.0-windows-x64.exe");
   assert.equal(assetName("0.4.0", "darwin", "x64"), "bibverify-0.4.0-macos-x64");
   assert.equal(assetName("0.4.0", "darwin", "arm64"), "bibverify-0.4.0-macos-arm64");
   assert.equal(assetName("0.4.0", "linux", "x64"), "bibverify-0.4.0-linux-x64");

@@ -24,9 +24,6 @@ jobs:
           - target: windows-x64
             runner: windows-latest
             python_arch: x64
-          - target: windows-arm64
-            runner: windows-11-arm
-            python_arch: arm64
           - target: macos-x64
             runner: macos-15-intel
             python_arch: x64
@@ -73,9 +70,25 @@ jobs:
           name: standalone-${{ matrix.target }}
           path: release/*
 
+  windows-arm64-emulation:
+    name: windows-arm64 x64 compatibility
+    needs: build
+    runs-on: windows-11-arm
+    steps:
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          name: standalone-windows-x64
+          path: release
+      - name: Smoke-test x64 executable under Windows Arm emulation
+        shell: pwsh
+        run: |
+          $executable = Get-ChildItem release -Filter "bibverify-*-windows-x64.exe" | Select-Object -First 1
+          if (-not $executable) { throw "Windows x64 release executable was not downloaded." }
+          & $executable.FullName --version
+
   release:
     if: startsWith(github.ref, 'refs/tags/') || inputs.release_tag != ''
-    needs: build
+    needs: [build, windows-arm64-emulation]
     runs-on: ubuntu-latest
     permissions:
       contents: write

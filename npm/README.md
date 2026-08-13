@@ -15,5 +15,8 @@ This is a zero-dependency launcher for the native binaries published by the
 current operating system and CPU, verifies it against the release `SHA256SUMS`, caches that exact
 version, and forwards all arguments and exit codes.
 
+Published native targets are Windows x64 plus macOS and Linux on x64/ARM64. On Windows 11 Arm, the
+launcher uses the Windows x64 executable through the operating system's built-in emulation.
+
 See the [complete documentation](https://github.com/Hylouis233/bibverify#readme) for configuration,
 MCP client setup, output safety, and the Python API.

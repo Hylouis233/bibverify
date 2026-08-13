@@ -15,7 +15,6 @@ def test_channel_manifests_are_generated_from_release_bytes(tmp_path: Path):
     release.mkdir()
     names = [
         "bibverify-9.8.7-windows-x64.exe",
-        "bibverify-9.8.7-windows-arm64.exe",
         "bibverify-9.8.7-macos-x64.tar.gz",
         "bibverify-9.8.7-macos-arm64.tar.gz",
         "bibverify-9.8.7-linux-x64.tar.gz",
@@ -37,6 +36,7 @@ def test_channel_manifests_are_generated_from_release_bytes(tmp_path: Path):
     expected = hashlib.sha256(b"bibverify-9.8.7-windows-x64.exe").hexdigest()
     assert scoop["architecture"]["64bit"]["hash"] == expected
     assert scoop["version"] == "9.8.7"
+    assert set(scoop["architecture"]) == {"64bit"}
 
     formula = (output / "bibverify.rb").read_text(encoding="utf-8")
     assert 'version "9.8.7"' in formula
@@ -47,11 +47,16 @@ def test_channel_manifests_are_generated_from_release_bytes(tmp_path: Path):
         parsed = yaml.safe_load(path.read_text(encoding="utf-8"))
         assert parsed["PackageVersion"] == "9.8.7"
 
+    winget = yaml.safe_load(
+        (output / "Hylouis233.Bibverify.installer.yaml").read_text(encoding="utf-8")
+    )
+    assert [installer["Architecture"] for installer in winget["Installers"]] == ["x64"]
+
 
 def test_standalone_target_names_are_normalized(monkeypatch):
-    monkeypatch.setenv("RUNNER_OS", "Windows")
+    monkeypatch.setenv("RUNNER_OS", "Linux")
     monkeypatch.setenv("RUNNER_ARCH", "ARM64")
-    assert normalized_target() == ("windows", "arm64")
+    assert normalized_target() == ("linux", "arm64")
 
     monkeypatch.setenv("RUNNER_OS", "macOS")
     monkeypatch.setenv("RUNNER_ARCH", "X64")

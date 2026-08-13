@@ -54,13 +54,12 @@ jobs:
             if gh release download "${RELEASE_TAG}" --repo "${GH_REPO}" --dir release-check \
                 --pattern SHA256SUMS \
                 --pattern "bibverify-${VERSION}-windows-x64.exe" \
-                --pattern "bibverify-${VERSION}-windows-arm64.exe" \
                 --pattern "bibverify-${VERSION}-macos-x64" \
                 --pattern "bibverify-${VERSION}-macos-arm64" \
                 --pattern "bibverify-${VERSION}-linux-x64" \
                 --pattern "bibverify-${VERSION}-linux-arm64" \
               && (cd release-check && sha256sum --ignore-missing --check SHA256SUMS) \
-              && [ "$(find release-check -maxdepth 1 -type f | wc -l)" -eq 7 ]; then
+              && [ "$(find release-check -maxdepth 1 -type f | wc -l)" -eq 6 ]; then
               exit 0
             fi
             if [ "$attempt" -eq 30 ]; then

@@ -23,7 +23,6 @@ def sha256(path: Path) -> str:
 def required_assets(release_dir: Path, version: str) -> dict[str, Path]:
     names = {
         "windows-x64": f"bibverify-{version}-windows-x64.exe",
-        "windows-arm64": f"bibverify-{version}-windows-arm64.exe",
         "macos-x64": f"bibverify-{version}-macos-x64.tar.gz",
         "macos-arm64": f"bibverify-{version}-macos-arm64.tar.gz",
         "linux-x64": f"bibverify-{version}-linux-x64.tar.gz",
@@ -89,10 +88,6 @@ def scoop_manifest(assets: dict[str, Path], version: str) -> str:
                 "url": f"{release_url(assets['windows-x64'], version)}#/bibverify.exe",
                 "hash": sha256(assets["windows-x64"]),
             },
-            "arm64": {
-                "url": f"{release_url(assets['windows-arm64'], version)}#/bibverify.exe",
-                "hash": sha256(assets["windows-arm64"]),
-            },
         },
         "bin": "bibverify.exe",
         "checkver": {"github": REPOSITORY},
@@ -100,9 +95,6 @@ def scoop_manifest(assets: dict[str, Path], version: str) -> str:
             "architecture": {
                 "64bit": {
                     "url": f"{REPOSITORY}/releases/download/v$version/bibverify-$version-windows-x64.exe#/bibverify.exe"
-                },
-                "arm64": {
-                    "url": f"{REPOSITORY}/releases/download/v$version/bibverify-$version-windows-arm64.exe#/bibverify.exe"
                 },
             }
         },
@@ -140,7 +132,7 @@ ManifestType: defaultLocale
 ManifestVersion: 1.12.0
 """
     installers = []
-    for architecture, target in (("x64", "windows-x64"), ("arm64", "windows-arm64")):
+    for architecture, target in (("x64", "windows-x64"),):
         path = assets[target]
         installers.append(
             f"""- Architecture: {architecture}

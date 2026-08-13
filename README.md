@@ -80,7 +80,10 @@ python -m pip install --upgrade bibverify
 
 Each release also provides smoke-tested native packages on
 [GitHub Releases](https://github.com/Hylouis233/bibverify/releases). Beginning with v0.4.0, the
-release matrix covers Windows, macOS, and Linux on both x64 and ARM64.
+release matrix covers Windows x64 plus macOS and Linux on both x64 and ARM64. Windows ARM64 is not
+published natively yet because an MCP runtime dependency does not currently provide Windows ARM64
+wheels; npm automatically uses the tested x64 build under Windows 11 emulation, or you can use the
+ARM64 container instead.
 
 The same release publishes a multi-architecture container:
 
@@ -358,7 +361,7 @@ bibverify doctor --config config.json
 | npm | `npx --yes @hylouis233/bibverify` | Planned for v0.4.0; not published yet |
 | pnpm / Bun | `pnpm dlx @hylouis233/bibverify` / `bunx @hylouis233/bibverify` | Planned for v0.4.0; not published yet |
 | GHCR | `docker pull ghcr.io/hylouis233/bibverify:0.4.0` | Planned for v0.4.0; not published yet |
-| Native | Windows, macOS, and Linux; x64 and ARM64 | Planned for v0.4.0; not published yet |
+| Native | Windows x64; macOS and Linux x64/ARM64 | Planned for v0.4.0; not published yet |
 | Homebrew | Release asset `bibverify.rb` | Submission manifest planned for v0.4.0; catalog not live |
 | Scoop | Release asset `bibverify.json` | Submission manifest planned for v0.4.0; catalog not live |
 | WinGet | Release assets `Hylouis233.Bibverify*.yaml` | Submission manifests planned for v0.4.0; catalog not live |
