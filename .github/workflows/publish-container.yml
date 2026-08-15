@@ -25,6 +25,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ inputs.release_tag || github.ref }}
+          fetch-depth: 0
       - uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3
       - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
       - name: Verify release version
@@ -36,14 +37,29 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Decide whether to update rolling tags
+        id: rolling
+        env:
+          RELEASE_TAG: ${{ inputs.release_tag || github.ref_name }}
+        shell: bash
+        run: |
+          LATEST_TAG=$(git tag --list --sort=-version:refname | awk '/^v[0-9]+\.[0-9]+\.[0-9]+$/ { print; exit }')
+          if [ "${RELEASE_TAG}" = "${LATEST_TAG}" ]; then
+            echo "enabled=true" >> "${GITHUB_OUTPUT}"
+          else
+            echo "enabled=false" >> "${GITHUB_OUTPUT}"
+            echo "Publishing immutable ${RELEASE_TAG} only; newest stable tag is ${LATEST_TAG:-unknown}."
+          fi
       - uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5
         id: metadata
         with:
           images: ghcr.io/hylouis233/bibverify
+          flavor: |
+            latest=false
           tags: |
             type=semver,pattern={{version}},value=${{ inputs.release_tag || github.ref_name }}
-            type=semver,pattern={{major}}.{{minor}},value=${{ inputs.release_tag || github.ref_name }}
-            type=raw,value=latest
+            type=semver,pattern={{major}}.{{minor}},value=${{ inputs.release_tag || github.ref_name }},enable=${{ steps.rolling.outputs.enabled }}
+            type=raw,value=latest,enable=${{ steps.rolling.outputs.enabled }}
           labels: |
             io.modelcontextprotocol.server.name=io.github.Hylouis233/bibverify
       - uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0

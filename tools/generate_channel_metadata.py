@@ -7,7 +7,10 @@ import hashlib
 import json
 from pathlib import Path
 
-from tools.sync_release_metadata import source_version
+if __package__:
+    from .sync_release_metadata import source_version
+else:
+    from sync_release_metadata import source_version
 
 REPOSITORY = "https://github.com/Hylouis233/bibverify"
 

@@ -29,6 +29,23 @@ jobs:
           npm ci
           npm test
           npm pack --dry-run
+      - name: Test Bun-only launcher
+        shell: bash
+        run: |
+          docker run --rm \
+            --volume "${GITHUB_WORKSPACE}/npm:/package:ro" \
+            --workdir /tmp \
+            oven/bun:1.3.3-alpine@sha256:d2bc1fbc3afcd3d70afc2bb2544235bf559caae2a3084e9abed126e233797511 \
+            sh -eu -c '
+              mkdir consumer
+              cd consumer
+              bun add /package >/dev/null
+              node_path=$(command -v node)
+              test "$(readlink -f "${node_path}")" = "$(readlink -f "$(command -v bun)")"
+              rm -f "${node_path}"
+              ! command -v node >/dev/null 2>&1
+              BIBVERIFY_BINARY=/bin/true bunx --bun --no-install bibverify --version
+            '
       - name: Validate Dockerfile build
         run: docker build --tag bibverify:ci .
       - name: Smoke-test container CLI
