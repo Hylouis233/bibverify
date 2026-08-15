@@ -40,9 +40,11 @@ jobs:
               mkdir consumer
               cd consumer
               bun add /package >/dev/null
-              node_path=$(command -v node)
-              test "$(readlink -f "${node_path}")" = "$(readlink -f "$(command -v bun)")"
-              rm -f "${node_path}"
+              node_path="$(command -v node || true)"
+              if [ -n "${node_path}" ]; then
+                test "$(readlink -f "${node_path}")" = "$(readlink -f "$(command -v bun)")"
+                rm -f "${node_path}"
+              fi
               ! command -v node >/dev/null 2>&1
               BIBVERIFY_BINARY=/bin/true bunx --bun --no-install bibverify --version
             '
