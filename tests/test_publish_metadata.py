@@ -85,7 +85,7 @@ class PublishMetadataTests(unittest.TestCase):
             self.assertNotIn("bunx @hylouis233/bibverify", text)
 
         workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
-        self.assertIn("bun run --bun bibverify", workflow)
+        self.assertIn("bunx --bun --no-install @hylouis233/bibverify", workflow)
         self.assertIn(
             'export PATH="/usr/local/bin:/usr/local/sbin:/usr/sbin:/usr/bin:/sbin:/bin"', workflow
         )

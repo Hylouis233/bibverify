@@ -45,7 +45,7 @@ jobs:
                 printf "unexpected Node executable: %s\n" "$(command -v node)" >&2
                 exit 1
               fi
-              BIBVERIFY_BINARY=/bin/true bun run --bun bibverify --version
+              BIBVERIFY_BINARY=/bin/true bunx --bun --no-install @hylouis233/bibverify --version
             '
       - name: Validate Dockerfile build
         run: docker build --tag bibverify:ci .
