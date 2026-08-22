@@ -78,6 +78,46 @@ class PublishMetadataTests(unittest.TestCase):
         self.assertIn("for attempt in {1..60}", workflow)
         self.assertIn("sleep 30", workflow)
 
+    def test_bun_commands_force_the_bun_runtime(self):
+        for relative_path in ("README.md", "README_CN.md", "npm/README.md"):
+            text = (ROOT / relative_path).read_text(encoding="utf-8")
+            self.assertIn("bunx --bun @hylouis233/bibverify", text)
+            self.assertNotIn("bunx @hylouis233/bibverify", text)
+
+        workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+        self.assertIn("bunx --bun --no-install @hylouis233/bibverify", workflow)
+        self.assertIn(
+            'export PATH="/usr/local/bin:/usr/local/sbin:/usr/sbin:/usr/bin:/sbin:/bin"', workflow
+        )
+        self.assertIn("if command -v node", workflow)
+        self.assertNotIn('rm -f "${node_path}"', workflow)
+
+    def test_container_recovery_does_not_move_rolling_tags_backward(self):
+        workflow = (ROOT / ".github" / "workflows" / "publish-container.yml").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn("fetch-depth: 0", workflow)
+        self.assertIn("git tag --list --sort=-version:refname", workflow)
+        self.assertIn("latest=false", workflow)
+        self.assertEqual(workflow.count("enable=${{ steps.rolling.outputs.enabled }}"), 2)
+
+    def test_npm_publish_waits_for_the_full_standalone_pipeline(self):
+        workflow = (ROOT / ".github" / "workflows" / "publish-npm.yml").read_text(encoding="utf-8")
+
+        self.assertIn("for attempt in {1..120}", workflow)
+        self.assertIn('if [ "$attempt" -eq 120 ]', workflow)
+
+    def test_linux_standalones_use_a_glibc_2_28_baseline(self):
+        workflow = (ROOT / ".github" / "workflows" / "publish-standalone.yml").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn("quay.io/pypa/manylinux_2_28_x86_64@sha256:", workflow)
+        self.assertIn("quay.io/pypa/manylinux_2_28_aarch64@sha256:", workflow)
+        self.assertIn("/opt/python/cp313-cp313/bin", workflow)
+        self.assertIn("Build and test Linux executable against glibc 2.28", workflow)
+
 
 if __name__ == "__main__":
     unittest.main()

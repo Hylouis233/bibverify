@@ -1,8 +1,8 @@
 import { createHash } from "node:crypto";
 import { chmod, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
-import { homedir } from "node:os";
+import { constants as osConstants, homedir } from "node:os";
 import { dirname, join } from "node:path";
-import { spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 import { assetName } from "./platform.js";
@@ -97,8 +97,44 @@ export async function ensureBinary() {
 
 export async function run(args) {
   const executable = await ensureBinary();
-  const result = spawnSync(executable, args, { stdio: "inherit", windowsHide: true });
-  if (result.error) throw result.error;
-  if (result.signal) throw new Error(`native process exited after signal ${result.signal}`);
-  return result.status ?? 1;
+  const child = spawn(executable, args, { stdio: "inherit", windowsHide: true });
+  const signals = process.platform === "win32" ? ["SIGINT", "SIGTERM"] : ["SIGHUP", "SIGINT", "SIGTERM"];
+
+  return new Promise((resolve, reject) => {
+    const handlers = new Map();
+    const cleanup = () => {
+      for (const [signal, handler] of handlers) process.removeListener(signal, handler);
+    };
+
+    for (const signal of signals) {
+      const handler = () => {
+        if (child.exitCode !== null || child.signalCode !== null) return;
+        try {
+          child.kill(signal);
+        } catch {
+          try {
+            child.kill();
+          } catch {
+            // The child may have exited between the state check and signal delivery.
+          }
+        }
+      };
+      handlers.set(signal, handler);
+      process.on(signal, handler);
+    }
+
+    child.once("error", (error) => {
+      cleanup();
+      reject(error);
+    });
+    child.once("close", (status, signal) => {
+      cleanup();
+      if (signal) {
+        const signalNumber = osConstants.signals[signal];
+        resolve(typeof signalNumber === "number" ? 128 + signalNumber : 1);
+        return;
+      }
+      resolve(status ?? 1);
+    });
+  });
 }

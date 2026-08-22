@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { after, test } from "node:test";
+import { spawn } from "node:child_process";
 import { createServer } from "node:http";
 import { chmod, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -27,6 +28,13 @@ test("rejects targets for which no native release is built", () => {
   assert.throws(() => releaseTarget("linux", "ia32"), /unsupported platform/u);
 });
 
+test("rejects musl Linux before selecting a glibc release", () => {
+  assert.throws(
+    () => assetName("0.4.0", "linux", "x64", "musl"),
+    /unsupported Linux libc musl; published binaries require glibc 2\.28 or newer/u,
+  );
+});
+
 test("forwards arguments and preserves the native exit code", async () => {
   process.env.BIBVERIFY_BINARY = process.execPath;
   try {
@@ -35,6 +43,67 @@ test("forwards arguments and preserves the native exit code", async () => {
     delete process.env.BIBVERIFY_BINARY;
   }
 });
+
+test(
+  "forwards SIGTERM to the native child",
+  { skip: process.platform === "win32" },
+  async () => {
+    const root = await mkdtemp(join(tmpdir(), "bibverify-npm-signal-test-"));
+    temporaryDirectories.push(root);
+    const pidFile = join(root, "native.pid");
+    const runnerUrl = new URL("../lib/runner.js", import.meta.url).href;
+    const nativeScript =
+      'const fs = require("node:fs"); fs.writeFileSync(process.argv[1], String(process.pid)); setInterval(() => {}, 1000);';
+    const wrapperScript = `import { run } from ${JSON.stringify(runnerUrl)}; process.exitCode = await run(["-e", ${JSON.stringify(nativeScript)}, ${JSON.stringify(pidFile)}]);`;
+    const wrapper = spawn(process.execPath, ["--input-type=module", "--eval", wrapperScript], {
+      env: { ...process.env, BIBVERIFY_BINARY: process.execPath },
+      stdio: "ignore",
+      windowsHide: true,
+    });
+    const wrapperExit = new Promise((resolve, reject) => {
+      wrapper.once("error", reject);
+      wrapper.once("exit", (code, signal) => resolve({ code, signal }));
+    });
+    let nativePid;
+
+    try {
+      const deadline = Date.now() + 5_000;
+      while (Date.now() < deadline) {
+        try {
+          nativePid = Number(await readFile(pidFile, "utf8"));
+          break;
+        } catch {
+          await new Promise((resolve) => setTimeout(resolve, 25));
+        }
+      }
+      assert.ok(Number.isInteger(nativePid), "native child did not start");
+
+      assert.equal(wrapper.kill("SIGTERM"), true);
+      assert.deepEqual(await wrapperExit, { code: 143, signal: null });
+
+      const reapDeadline = Date.now() + 5_000;
+      while (Date.now() < reapDeadline) {
+        try {
+          process.kill(nativePid, 0);
+          await new Promise((resolve) => setTimeout(resolve, 25));
+        } catch (error) {
+          if (error?.code === "ESRCH") return;
+          throw error;
+        }
+      }
+      assert.fail(`native child ${nativePid} remained alive after SIGTERM`);
+    } finally {
+      if (wrapper.exitCode === null && wrapper.signalCode === null) wrapper.kill("SIGKILL");
+      if (Number.isInteger(nativePid)) {
+        try {
+          process.kill(nativePid, "SIGKILL");
+        } catch (error) {
+          if (error?.code !== "ESRCH") throw error;
+        }
+      }
+    }
+  },
+);
 
 test("downloads and verifies an uncached native release", async () => {
   const root = await mkdtemp(join(tmpdir(), "bibverify-npm-test-"));

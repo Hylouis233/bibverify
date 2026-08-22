@@ -39,13 +39,13 @@ jobs:
         run: |
           case "${TARGET}" in
             all)
-              MATRIX='{"include":[{"target":"windows-x64","runner":"windows-latest","python_arch":"x64"},{"target":"macos-x64","runner":"macos-15-intel","python_arch":"x64"},{"target":"macos-arm64","runner":"macos-latest","python_arch":"arm64"},{"target":"linux-x64","runner":"ubuntu-latest","python_arch":"x64"},{"target":"linux-arm64","runner":"ubuntu-24.04-arm","python_arch":"arm64"}]}'
+              MATRIX='{"include":[{"target":"windows-x64","runner":"windows-latest","python_arch":"x64"},{"target":"macos-x64","runner":"macos-15-intel","python_arch":"x64"},{"target":"macos-arm64","runner":"macos-latest","python_arch":"arm64"},{"target":"linux-x64","runner":"ubuntu-latest","python_arch":"x64","container_image":"quay.io/pypa/manylinux_2_28_x86_64@sha256:f854c50adf7b7a325bc4794316f3758d387a41d61f9e2ebca0f26c7dc8f761d4"},{"target":"linux-arm64","runner":"ubuntu-24.04-arm","python_arch":"arm64","container_image":"quay.io/pypa/manylinux_2_28_aarch64@sha256:b9dd5b2d6885fae144119ac934978003bcc413087ea08f602a960257205ec246"}]}'
               ;;
             windows-x64) MATRIX='{"include":[{"target":"windows-x64","runner":"windows-latest","python_arch":"x64"}]}' ;;
             macos-x64) MATRIX='{"include":[{"target":"macos-x64","runner":"macos-15-intel","python_arch":"x64"}]}' ;;
             macos-arm64) MATRIX='{"include":[{"target":"macos-arm64","runner":"macos-latest","python_arch":"arm64"}]}' ;;
-            linux-x64) MATRIX='{"include":[{"target":"linux-x64","runner":"ubuntu-latest","python_arch":"x64"}]}' ;;
-            linux-arm64) MATRIX='{"include":[{"target":"linux-arm64","runner":"ubuntu-24.04-arm","python_arch":"arm64"}]}' ;;
+            linux-x64) MATRIX='{"include":[{"target":"linux-x64","runner":"ubuntu-latest","python_arch":"x64","container_image":"quay.io/pypa/manylinux_2_28_x86_64@sha256:f854c50adf7b7a325bc4794316f3758d387a41d61f9e2ebca0f26c7dc8f761d4"}]}' ;;
+            linux-arm64) MATRIX='{"include":[{"target":"linux-arm64","runner":"ubuntu-24.04-arm","python_arch":"arm64","container_image":"quay.io/pypa/manylinux_2_28_aarch64@sha256:b9dd5b2d6885fae144119ac934978003bcc413087ea08f602a960257205ec246"}]}' ;;
             *) echo "Unsupported target: ${TARGET}" >&2; exit 1 ;;
           esac
           echo "matrix=${MATRIX}" >> "${GITHUB_OUTPUT}"
@@ -62,11 +62,13 @@ jobs:
         with:
           ref: ${{ inputs.release_tag || github.ref }}
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        if: ${{ !startsWith(matrix.target, 'linux-') }}
         with:
           python-version: "3.13"
           architecture: ${{ matrix.python_arch }}
           cache: pip
-      - run: python -m pip install --upgrade pip
+      - if: ${{ !startsWith(matrix.target, 'linux-') }}
+        run: python -m pip install --upgrade pip
       - name: Build cryptography with static OpenSSL on macOS Intel
         if: matrix.target == 'macos-x64'
         shell: bash
@@ -74,25 +76,69 @@ jobs:
           export OPENSSL_DIR="$(brew --prefix openssl@3)"
           export OPENSSL_STATIC=1
           python -m pip install --no-cache-dir --no-binary cryptography cryptography
-      - run: python -m pip install -e ".[dev]"
-      - run: python -m pytest
-      - run: python -m bibverify benchmark
-      - run: python tools/sync_release_metadata.py --check
-      - run: python tools/validate_project.py
+      - if: ${{ !startsWith(matrix.target, 'linux-') }}
+        run: python -m pip install -e ".[dev]"
+      - if: ${{ !startsWith(matrix.target, 'linux-') }}
+        run: python -m pytest
+      - if: ${{ !startsWith(matrix.target, 'linux-') }}
+        run: python -m bibverify benchmark
+      - if: ${{ !startsWith(matrix.target, 'linux-') }}
+        run: python tools/sync_release_metadata.py --check
+      - if: ${{ !startsWith(matrix.target, 'linux-') }}
+        run: python tools/validate_project.py
       - name: Verify tag matches package version
-        if: startsWith(github.ref, 'refs/tags/') || inputs.release_tag != ''
+        if: >-
+          !startsWith(matrix.target, 'linux-') &&
+          (startsWith(github.ref, 'refs/tags/') || inputs.release_tag != '')
         env:
           RELEASE_TAG: ${{ inputs.release_tag || github.ref_name }}
         shell: bash
         run: test "${RELEASE_TAG}" = "v$(python -c 'from bibverify import __version__; print(__version__)')"
       - name: Build native executable
+        if: ${{ !startsWith(matrix.target, 'linux-') }}
         run: >-
           python -m PyInstaller --noconfirm --clean --onefile
           --name bibverify --paths src --distpath dist-standalone
           --workpath build/pyinstaller --specpath build/pyinstaller
           --collect-all mcp --collect-data bibverify src/bibverify/__main__.py
       - name: Smoke-test and package
+        if: ${{ !startsWith(matrix.target, 'linux-') }}
         run: python tools/package_standalone.py
+      - name: Build and test Linux executable against glibc 2.28
+        if: startsWith(matrix.target, 'linux-')
+        env:
+          IS_RELEASE: ${{ startsWith(github.ref, 'refs/tags/') || inputs.release_tag != '' }}
+          RELEASE_TAG: ${{ inputs.release_tag || github.ref_name }}
+        shell: bash
+        run: |
+          docker run --rm \
+            --volume "${GITHUB_WORKSPACE}:/workspace" \
+            --workdir /workspace \
+            --env IS_RELEASE \
+            --env RELEASE_TAG \
+            --env RUNNER_ARCH \
+            --env RUNNER_OS \
+            "${{ matrix.container_image }}" \
+            bash -euo pipefail -c '
+              export PATH=/opt/python/cp313-cp313/bin:${PATH}
+              python --version
+              ldd --version 2>&1 | sed -n 1p
+              python -m pip install --upgrade pip
+              python -m pip install -e ".[dev]"
+              python -m pytest
+              python -m bibverify benchmark
+              python tools/sync_release_metadata.py --check
+              python tools/validate_project.py
+              if [ "${IS_RELEASE}" = "true" ]; then
+                PACKAGE_VERSION=$(python -c "from bibverify import __version__; print(__version__)")
+                test "${RELEASE_TAG}" = "v${PACKAGE_VERSION}"
+              fi
+              python -m PyInstaller --noconfirm --clean --onefile \
+                --name bibverify --paths src --distpath dist-standalone \
+                --workpath build/pyinstaller --specpath build/pyinstaller \
+                --collect-all mcp --collect-data bibverify src/bibverify/__main__.py
+              python tools/package_standalone.py
+            '
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: standalone-${{ matrix.target }}
