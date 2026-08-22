@@ -59,7 +59,7 @@ matching native release, verifies `SHA256SUMS`, and forwards every argument and 
 ```bash
 npx --yes @hylouis233/bibverify --version
 pnpm dlx @hylouis233/bibverify --version
-bunx @hylouis233/bibverify --version
+bunx --bun @hylouis233/bibverify --version
 ```
 
 For a persistent CLI in an isolated Python environment, use `uv tool` or `pipx`:
@@ -80,10 +80,11 @@ python -m pip install --upgrade bibverify
 
 Each release also provides smoke-tested native packages on
 [GitHub Releases](https://github.com/Hylouis233/bibverify/releases). Beginning with v0.4.0, the
-release matrix covers Windows x64 plus macOS and Linux on both x64 and ARM64. Windows ARM64 is not
-published natively yet because an MCP runtime dependency does not currently provide Windows ARM64
-wheels; npm automatically uses the tested x64 build under Windows 11 emulation, or you can use the
-ARM64 container instead.
+release matrix covers Windows x64 plus macOS and glibc 2.28+ Linux on both x64 and ARM64. musl-based
+Linux users should use the Python package or container image. Windows ARM64 is not published natively
+yet because an MCP runtime dependency does not currently provide Windows ARM64 wheels; npm
+automatically uses the tested x64 build under Windows 11 emulation, or you can use the ARM64 container
+instead.
 
 The same release publishes a multi-architecture container:
 
@@ -359,9 +360,9 @@ bibverify doctor --config config.json
 | uv | `uvx bibverify` or `uv tool install bibverify` | Published |
 | pipx | `pipx install bibverify` | Published |
 | npm | `npx --yes @hylouis233/bibverify` | Planned for v0.4.0; not published yet |
-| pnpm / Bun | `pnpm dlx @hylouis233/bibverify` / `bunx @hylouis233/bibverify` | Planned for v0.4.0; not published yet |
+| pnpm / Bun | `pnpm dlx @hylouis233/bibverify` / `bunx --bun @hylouis233/bibverify` | Planned for v0.4.0; not published yet |
 | GHCR | `docker pull ghcr.io/hylouis233/bibverify:0.4.0` | Planned for v0.4.0; not published yet |
-| Native | Windows x64; macOS and Linux x64/ARM64 | Planned for v0.4.0; not published yet |
+| Native | Windows x64; macOS and glibc 2.28+ Linux x64/ARM64 | Planned for v0.4.0; not published yet |
 | Homebrew | Release asset `bibverify.rb` | Submission manifest planned for v0.4.0; catalog not live |
 | Scoop | Release asset `bibverify.json` | Submission manifest planned for v0.4.0; catalog not live |
 | WinGet | Release assets `Hylouis233.Bibverify*.yaml` | Submission manifests planned for v0.4.0; catalog not live |

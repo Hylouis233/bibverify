@@ -59,7 +59,7 @@ uvx bibverify --version
 ```bash
 npx --yes @hylouis233/bibverify --version
 pnpm dlx @hylouis233/bibverify --version
-bunx @hylouis233/bibverify --version
+bunx --bun @hylouis233/bibverify --version
 ```
 
 需要长期使用时，推荐 `uv tool` 或 `pipx`：
@@ -78,7 +78,7 @@ pipx install bibverify
 python -m pip install --upgrade bibverify
 ```
 
-每个版本还会在 [GitHub Releases](https://github.com/Hylouis233/bibverify/releases) 提供原生构建并冒烟测试的独立程序。从 v0.4.0 起，矩阵覆盖 Windows x64，以及 macOS 和 Linux 的 x64/ARM64。由于 MCP 的一个运行时依赖目前没有提供 Windows ARM64 wheel，暂不发布原生 Windows ARM64 程序；npm 会在 Windows 11 ARM 上自动选择经过实测的 x64 模拟兼容版本，也可使用 ARM64 容器。
+每个版本还会在 [GitHub Releases](https://github.com/Hylouis233/bibverify/releases) 提供原生构建并冒烟测试的独立程序。从 v0.4.0 起，矩阵覆盖 Windows x64，以及 macOS 和 glibc 2.28+ Linux 的 x64/ARM64；musl Linux 用户应使用 Python 包或容器。由于 MCP 的一个运行时依赖目前没有提供 Windows ARM64 wheel，暂不发布原生 Windows ARM64 程序；npm 会在 Windows 11 ARM 上自动选择经过实测的 x64 模拟兼容版本，也可使用 ARM64 容器。
 
 同一版本还会发布多架构容器：
 
@@ -332,9 +332,9 @@ bibverify doctor --config config.json
 | uv | `uvx bibverify` / `uv tool install bibverify` | 已发布 |
 | pipx | `pipx install bibverify` | 已发布 |
 | npm | `npx --yes @hylouis233/bibverify` | 计划随 v0.4.0 发布；目前尚未上架 |
-| pnpm / Bun | `pnpm dlx @hylouis233/bibverify` / `bunx @hylouis233/bibverify` | 计划随 v0.4.0 发布；目前尚未上架 |
+| pnpm / Bun | `pnpm dlx @hylouis233/bibverify` / `bunx --bun @hylouis233/bibverify` | 计划随 v0.4.0 发布；目前尚未上架 |
 | GHCR | `docker pull ghcr.io/hylouis233/bibverify:0.4.0` | 计划随 v0.4.0 发布；目前尚未上架 |
-| 原生程序 | Windows x64；macOS、Linux x64/ARM64 | 计划随 v0.4.0 发布；目前尚未上架 |
+| 原生程序 | Windows x64；macOS、glibc 2.28+ Linux x64/ARM64 | 计划随 v0.4.0 发布；目前尚未上架 |
 | Homebrew | Release 资产 `bibverify.rb` | v0.4.0 计划生成提交清单；目录尚未上架 |
 | Scoop | Release 资产 `bibverify.json` | v0.4.0 计划生成提交清单；目录尚未上架 |
 | WinGet | Release 资产 `Hylouis233.Bibverify*.yaml` | v0.4.0 计划生成提交清单；目录尚未上架 |

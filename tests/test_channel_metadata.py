@@ -2,11 +2,27 @@ from __future__ import annotations
 
 import hashlib
 import json
+import subprocess
+import sys
 from pathlib import Path
 
 import yaml
 from tools.generate_channel_metadata import generate
 from tools.package_standalone import normalized_target
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def test_channel_metadata_generator_runs_as_a_script(tmp_path: Path):
+    result = subprocess.run(
+        [sys.executable, str(ROOT / "tools" / "generate_channel_metadata.py"), "--help"],
+        cwd=tmp_path,
+        capture_output=True,
+        check=False,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
 
 
 def test_channel_manifests_are_generated_from_release_bytes(tmp_path: Path):
