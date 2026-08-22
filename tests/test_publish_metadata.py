@@ -86,7 +86,11 @@ class PublishMetadataTests(unittest.TestCase):
 
         workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
         self.assertIn("bunx --bun --no-install bibverify", workflow)
-        self.assertIn("! command -v node", workflow)
+        self.assertIn(
+            'export PATH="/usr/local/bin:/usr/local/sbin:/usr/sbin:/usr/bin:/sbin:/bin"', workflow
+        )
+        self.assertIn("if command -v node", workflow)
+        self.assertNotIn('rm -f "${node_path}"', workflow)
 
     def test_container_recovery_does_not_move_rolling_tags_backward(self):
         workflow = (ROOT / ".github" / "workflows" / "publish-container.yml").read_text(
