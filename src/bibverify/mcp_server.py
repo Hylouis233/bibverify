@@ -11,6 +11,7 @@ from typing import Any, Literal
 import anyio
 from mcp.server import MCPServer
 from mcp.server.mcpserver import Context
+from mcp.server.mcpserver.exceptions import ToolError
 from mcp_types import LATEST_PROTOCOL_VERSION
 
 from bibverify import __version__
@@ -27,7 +28,7 @@ def _resolve_within(root: Path, value: str | Path, *, label: str) -> Path:
     try:
         path.relative_to(root)
     except ValueError as exc:
-        raise ValueError(f"{label} must stay within the MCP workspace root: {root}") from exc
+        raise ToolError(f"{label} must stay within the configured MCP workspace root") from exc
     return path
 
 
@@ -76,7 +77,7 @@ def create_server(
             service = checker(config_file)
             bibtex = service.bibtex_from_doi(doi, key=key)
         if not bibtex:
-            raise ValueError(service.lang.get_text("doi_not_found", doi=doi))
+            raise ToolError(service.lang.get_text("doi_not_found", doi=doi))
         return {"doi": service.canonicalize_doi(doi), "bibtex": bibtex.strip()}
 
     @server.tool(structured_output=True)
