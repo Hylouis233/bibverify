@@ -10,6 +10,8 @@ from bibtexparser.bibdatabase import BibDatabase
 from bibtexparser.bparser import BibTexParser
 from bibtexparser.bwriter import BibTexWriter
 
+from bibverify.models import QueryStatus
+
 
 class BibTeXMixin:
     def format_field_value(self, value, protect_case=True):
@@ -633,11 +635,30 @@ class BibTeXMixin:
         key = re.sub(r"[^A-Za-z0-9_:-]+", "_", raw_key).strip("_:-")
         return key or "crossref_entry"
 
-    def bibtex_from_doi(self, doi, key=None):
-        result = self.query_crossref_by_doi(doi)
-        if not result:
-            return None
-        crossref_data = result[1]
+    def bibtex_from_doi_result(self, doi, key=None):
+        """Return generated BibTeX together with the structured Crossref result."""
+        result = self.provider_registry["crossref"].lookup(
+            "", {"ID": "reference", "title": "", "doi": doi}
+        )
+        if result.status is not QueryStatus.MATCHED or not result.best:
+            return None, result
+        crossref_data = result.best.payload
         entry_key = key or self.generate_crossref_key(crossref_data, doi)
         entry = self.crossref_to_bibtex(crossref_data, entry_key)
-        return self.entry_to_bibtex(entry)
+        return self.entry_to_bibtex(entry), result
+
+    def doi_lookup_failure_message(self, doi, result):
+        """Return a stable public message without exposing provider error details."""
+        if result.status is QueryStatus.RATE_LIMITED:
+            return self.lang.get_text("rate_limit_429", platform="Crossref")
+        if result.status is QueryStatus.IDENTIFIER_CONFLICT:
+            return self.lang.get_text("doi_identifier_conflict", doi=doi)
+        if result.status.is_unavailable:
+            return self.lang.get_text(
+                "source_unavailable", platform="Crossref", status=result.status.value
+            )
+        return self.lang.get_text("doi_not_found", doi=doi)
+
+    def bibtex_from_doi(self, doi, key=None):
+        bibtex, _ = self.bibtex_from_doi_result(doi, key=key)
+        return bibtex

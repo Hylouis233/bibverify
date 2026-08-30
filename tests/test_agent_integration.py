@@ -13,6 +13,7 @@ from mcp_types import LATEST_PROTOCOL_VERSION
 
 from bibverify.agent import build_mcp_config, build_skill_markdown, doctor, init_agent
 from bibverify.mcp_server import create_server, handle_request, run_stdio_server
+from bibverify.models import ProviderResult, QueryStatus
 
 
 class AgentIntegrationTests(unittest.TestCase):
@@ -127,8 +128,13 @@ async def test_official_mcp_sdk_lists_and_calls_tools():
 async def test_mcp_preserves_expected_doi_not_found_error():
     with patch("bibverify.mcp_server.BibTeXChecker") as checker_class:
         checker = checker_class.return_value
-        checker.bibtex_from_doi.return_value = None
-        checker.lang.get_text.return_value = "Could not find a reference for DOI: 10.0/missing"
+        checker.bibtex_from_doi_result.return_value = (
+            None,
+            ProviderResult("crossref", QueryStatus.NO_MATCH),
+        )
+        checker.doi_lookup_failure_message.return_value = (
+            "Could not find a reference for DOI: 10.0/missing"
+        )
         server = create_server("__missing_test_config__.json")
 
         async with Client(server) as client:
@@ -136,6 +142,87 @@ async def test_mcp_preserves_expected_doi_not_found_error():
 
     assert result.is_error
     assert "Could not find a reference for DOI" in result.content[0].text
+
+
+@pytest.mark.anyio
+async def test_mcp_does_not_report_crossref_rate_limit_as_doi_not_found():
+    with patch("bibverify.mcp_server.BibTeXChecker") as checker_class:
+        checker = checker_class.return_value
+        checker.bibtex_from_doi_result.return_value = (
+            None,
+            ProviderResult("crossref", QueryStatus.RATE_LIMITED, http_status=429),
+        )
+        checker.doi_lookup_failure_message.return_value = (
+            "Crossref rate limit - recommend adding API key"
+        )
+        server = create_server("__missing_test_config__.json")
+
+        async with Client(server) as client:
+            result = await client.call_tool("doi_to_bibtex", {"doi": "10.0/rate-limited"})
+
+    assert result.is_error
+    assert "rate limit" in result.content[0].text
+    assert "not find" not in result.content[0].text
+
+
+def test_compat_mcp_preserves_crossref_rate_limit_status():
+    with patch("bibverify.mcp_server.BibTeXChecker") as checker_class:
+        checker = checker_class.return_value
+        checker.bibtex_from_doi_result.return_value = (
+            None,
+            ProviderResult("crossref", QueryStatus.RATE_LIMITED, http_status=429),
+        )
+        checker.doi_lookup_failure_message.return_value = (
+            "Crossref rate limit - recommend adding API key"
+        )
+        response = handle_request(
+            {
+                "jsonrpc": "2.0",
+                "id": 7,
+                "method": "tools/call",
+                "params": {
+                    "name": "doi_to_bibtex",
+                    "arguments": {"doi": "10.0/rate-limited"},
+                },
+            }
+        )
+
+    text = response["result"]["content"][0]["text"]
+    assert response["result"]["isError"] is True
+    assert "rate limit" in text
+    assert "not find" not in text
+
+
+@pytest.mark.anyio
+async def test_mcp_and_compat_reject_crossref_identifier_conflict():
+    with patch("bibverify.mcp_server.BibTeXChecker") as checker_class:
+        checker = checker_class.return_value
+        checker.bibtex_from_doi_result.return_value = (
+            None,
+            ProviderResult("crossref", QueryStatus.IDENTIFIER_CONFLICT),
+        )
+        checker.doi_lookup_failure_message.return_value = "Crossref DOI conflict"
+        server = create_server("__missing_test_config__.json")
+
+        async with Client(server) as client:
+            official = await client.call_tool("doi_to_bibtex", {"doi": "10.0/conflict"})
+
+        compat = handle_request(
+            {
+                "jsonrpc": "2.0",
+                "id": 8,
+                "method": "tools/call",
+                "params": {
+                    "name": "doi_to_bibtex",
+                    "arguments": {"doi": "10.0/conflict"},
+                },
+            }
+        )
+
+    assert official.is_error
+    assert "conflict" in official.content[0].text
+    assert compat["result"]["isError"] is True
+    assert "conflict" in compat["result"]["content"][0]["text"]
 
 
 def test_mcp_rejects_config_outside_workspace(tmp_path):

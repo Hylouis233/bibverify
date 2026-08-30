@@ -25,6 +25,7 @@ from bibverify.benchmark import run_benchmark
 from bibverify.cache import ResponseCache
 from bibverify.checker import BibTeXChecker
 from bibverify.config import create_config, load_config
+from bibverify.models import QueryStatus
 
 app = typer.Typer(
     name="bibverify",
@@ -171,9 +172,13 @@ def doi(
     """Resolve one DOI to a BibTeX entry."""
     with redirect_stdout(StringIO()):
         checker = BibTeXChecker(config)
-        bibtex = checker.bibtex_from_doi(value, key=key)
+        bibtex, lookup = checker.bibtex_from_doi_result(value, key=key)
     if not bibtex:
-        error_console.print(checker.lang.get_text("doi_not_found", doi=value))
+        error_console.print(checker.doi_lookup_failure_message(value, lookup))
+        if lookup.status.is_unavailable:
+            raise typer.Exit(code=4)
+        if lookup.status is QueryStatus.IDENTIFIER_CONFLICT:
+            raise typer.Exit(code=3)
         raise typer.Exit(code=1)
     if json_output:
         typer.echo(
