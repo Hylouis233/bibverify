@@ -8,6 +8,15 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    groups:
+      codeql-action:
+        applies-to: version-updates
+        patterns:
+          - "github/codeql-action/*"
+      codeql-action-security:
+        applies-to: security-updates
+        patterns:
+          - "github/codeql-action/*"
   - package-ecosystem: npm
     directory: /npm
     schedule:
