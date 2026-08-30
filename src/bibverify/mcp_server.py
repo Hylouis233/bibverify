@@ -75,9 +75,9 @@ def create_server(
         """Fetch one DOI through Crossref and return a BibTeX entry."""
         with redirect_stdout(io.StringIO()):
             service = checker(config_file)
-            bibtex = service.bibtex_from_doi(doi, key=key)
+            bibtex, lookup = service.bibtex_from_doi_result(doi, key=key)
         if not bibtex:
-            raise ToolError(service.lang.get_text("doi_not_found", doi=doi))
+            raise ToolError(service.doi_lookup_failure_message(doi, lookup))
         return {"doi": service.canonicalize_doi(doi), "bibtex": bibtex.strip()}
 
     @server.tool(structured_output=True)
@@ -151,11 +151,10 @@ def _call_compat(name: str, arguments: dict[str, Any], default_config: str) -> d
     with redirect_stdout(io.StringIO()):
         checker = BibTeXChecker(config_file)
         if name == "doi_to_bibtex":
-            bibtex = checker.bibtex_from_doi(arguments.get("doi", ""), key=arguments.get("key"))
+            doi = arguments.get("doi", "")
+            bibtex, lookup = checker.bibtex_from_doi_result(doi, key=arguments.get("key"))
             if not bibtex:
-                return _text_result(
-                    checker.lang.get_text("doi_not_found", doi=arguments.get("doi", "")), True
-                )
+                return _text_result(checker.doi_lookup_failure_message(doi, lookup), True)
             return _text_result(bibtex.strip(), structured={"bibtex": bibtex.strip()})
         if name == "rank_lookup_sources":
             order = checker._rank_platforms_for_entry(

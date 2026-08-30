@@ -53,6 +53,8 @@ TEXTS = {
         "no_wrong_skip": "[3/3] 无待复核条目，跳过生成 review 文件",
         "missing_optional_dependency": "{platform} 可选依赖缺失: {dependency}，请安装后重试或禁用该平台",
         "doi_not_found": "未能通过 DOI 找到文献: {doi}",
+        "doi_identifier_conflict": "Crossref 返回的 DOI 与请求标识符冲突: {doi}",
+        "source_unavailable": "{platform} 数据源暂时不可用: {status}",
         "skip_enrichment_only": "[{platform}] ✗ 跳过（仅用于开放获取补充，不作为文献元数据源）",
     },
     "EN": {
@@ -103,6 +105,8 @@ TEXTS = {
         "no_wrong_skip": "[3/3] No review entries, skipping review file generation",
         "missing_optional_dependency": "{platform} optional dependency missing: {dependency}; install it or disable the platform",
         "doi_not_found": "Could not find a reference for DOI: {doi}",
+        "doi_identifier_conflict": "Crossref returned a DOI that conflicts with: {doi}",
+        "source_unavailable": "{platform} source unavailable: {status}",
         "skip_enrichment_only": "[{platform}] ✗ Skipped (open-access enrichment only, not bibliographic metadata)",
     },
 }

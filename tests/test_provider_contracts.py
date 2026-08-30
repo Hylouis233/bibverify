@@ -47,6 +47,44 @@ def test_crossref_fixture_extracts_candidate_and_doi(checker, requests_mock):
     assert result.best.entry["doi"] == "10.1000/reliable"
 
 
+def test_doi_bibtex_preserves_crossref_rate_limit_status(checker, requests_mock):
+    requests_mock.get("https://api.crossref.org/works/10.1000%2Frate-limited", status_code=429)
+
+    bibtex, result = checker.bibtex_from_doi_result("10.1000/rate-limited")
+
+    assert bibtex is None
+    assert result.status is QueryStatus.RATE_LIMITED
+    message = checker.doi_lookup_failure_message("10.1000/rate-limited", result)
+    assert message != checker.lang.get_text("doi_not_found", doi="10.1000/rate-limited")
+    assert "https://" not in message
+
+
+def test_doi_bibtex_result_preserves_successful_generation(checker, requests_mock):
+    payload = load_json("crossref", "search.json")["message"]["items"][0]
+    requests_mock.get(
+        "https://api.crossref.org/works/10.1000%2Freliable", json={"message": payload}
+    )
+
+    bibtex, result = checker.bibtex_from_doi_result("10.1000/reliable", key="fixture-key")
+
+    assert result.status is QueryStatus.MATCHED
+    assert "@article{fixture-key," in bibtex
+    assert checker.bibtex_from_doi("10.1000/reliable", key="fixture-key") == bibtex
+
+
+def test_doi_bibtex_rejects_identifier_conflict(checker, requests_mock):
+    payload = load_json("crossref", "search.json")["message"]["items"][0]
+    requests_mock.get(
+        "https://api.crossref.org/works/10.1000%2Fdifferent", json={"message": payload}
+    )
+
+    bibtex, result = checker.bibtex_from_doi_result("10.1000/different")
+
+    assert bibtex is None
+    assert result.status is QueryStatus.IDENTIFIER_CONFLICT
+    assert "冲突" in checker.doi_lookup_failure_message("10.1000/different", result)
+
+
 def test_openalex_fixture_extracts_pages_and_provider_status(checker, requests_mock):
     requests_mock.get("https://api.openalex.org/works", json=load_json("openalex", "search.json"))
 

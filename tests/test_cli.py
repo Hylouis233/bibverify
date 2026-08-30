@@ -5,6 +5,7 @@ from unittest.mock import patch
 from typer.testing import CliRunner
 
 from bibverify.cli import _translate_legacy_args, app
+from bibverify.models import ProviderResult, QueryStatus
 
 runner = CliRunner()
 
@@ -105,3 +106,33 @@ def test_invalid_input_uses_documented_exit_code(tmp_path):
     result = runner.invoke(app, ["check", str(missing), "--dry-run"])
 
     assert result.exit_code == 5
+
+
+def test_doi_rate_limit_uses_source_unavailable_exit_code():
+    with patch("bibverify.cli.BibTeXChecker") as checker_class:
+        checker = checker_class.return_value
+        checker.bibtex_from_doi_result.return_value = (
+            None,
+            ProviderResult("crossref", QueryStatus.RATE_LIMITED, http_status=429),
+        )
+        checker.doi_lookup_failure_message.return_value = (
+            "Crossref rate limit - recommend adding API key"
+        )
+        result = runner.invoke(app, ["doi", "10.0/rate-limited"])
+
+    assert result.exit_code == 4
+    assert "rate limit" in result.stderr
+
+
+def test_doi_identifier_conflict_uses_review_required_exit_code():
+    with patch("bibverify.cli.BibTeXChecker") as checker_class:
+        checker = checker_class.return_value
+        checker.bibtex_from_doi_result.return_value = (
+            None,
+            ProviderResult("crossref", QueryStatus.IDENTIFIER_CONFLICT),
+        )
+        checker.doi_lookup_failure_message.return_value = "Crossref DOI conflict"
+        result = runner.invoke(app, ["doi", "10.0/conflict"])
+
+    assert result.exit_code == 3
+    assert "conflict" in result.stderr
