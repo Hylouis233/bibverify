@@ -123,6 +123,21 @@ async def test_official_mcp_sdk_lists_and_calls_tools():
     assert result.structured_content["differences"]["title"]["original"] == "Old title"
 
 
+@pytest.mark.anyio
+async def test_mcp_preserves_expected_doi_not_found_error():
+    with patch("bibverify.mcp_server.BibTeXChecker") as checker_class:
+        checker = checker_class.return_value
+        checker.bibtex_from_doi.return_value = None
+        checker.lang.get_text.return_value = "Could not find a reference for DOI: 10.0/missing"
+        server = create_server("__missing_test_config__.json")
+
+        async with Client(server) as client:
+            result = await client.call_tool("doi_to_bibtex", {"doi": "10.0/missing"})
+
+    assert result.is_error
+    assert "Could not find a reference for DOI" in result.content[0].text
+
+
 def test_mcp_rejects_config_outside_workspace(tmp_path):
     workspace = tmp_path / "workspace"
     workspace.mkdir()
@@ -140,6 +155,7 @@ def test_mcp_rejects_config_outside_workspace(tmp_path):
     result = anyio.run(call)
     assert result.is_error
     assert "workspace root" in result.content[0].text
+    assert str(workspace) not in result.content[0].text
 
 
 def test_mcp_rejects_config_that_points_outside_workspace(tmp_path):
@@ -156,6 +172,7 @@ def test_mcp_rejects_config_that_points_outside_workspace(tmp_path):
     result = anyio.run(call)
     assert result.is_error
     assert "bib_file must stay" in result.content[0].text
+    assert str(workspace) not in result.content[0].text
 
 
 if __name__ == "__main__":
