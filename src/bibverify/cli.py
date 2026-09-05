@@ -175,6 +175,8 @@ def doi(
         bibtex, lookup = checker.bibtex_from_doi_result(value, key=key)
     if not bibtex:
         error_console.print(checker.doi_lookup_failure_message(value, lookup))
+        if lookup.status is QueryStatus.INVALID_INPUT:
+            raise typer.Exit(code=5)
         if lookup.status.is_unavailable:
             raise typer.Exit(code=4)
         if lookup.status is QueryStatus.IDENTIFIER_CONFLICT:

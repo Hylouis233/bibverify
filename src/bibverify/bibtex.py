@@ -649,8 +649,10 @@ class BibTeXMixin:
 
     def doi_lookup_failure_message(self, doi, result):
         """Return a stable public message without exposing provider error details."""
+        if result.status is QueryStatus.INVALID_INPUT:
+            return self.lang.get_text("doi_invalid_input")
         if result.status is QueryStatus.RATE_LIMITED:
-            return self.lang.get_text("rate_limit_429", platform="Crossref")
+            return self.lang.get_text("crossref_rate_limit_429")
         if result.status is QueryStatus.IDENTIFIER_CONFLICT:
             return self.lang.get_text("doi_identifier_conflict", doi=doi)
         if result.status.is_unavailable:
