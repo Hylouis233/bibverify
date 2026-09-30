@@ -120,8 +120,28 @@ jobs:
             --env RUNNER_OS \
             "${{ matrix.container_image }}" \
             bash -euo pipefail -c '
-              export PATH=/opt/python/cp313-cp313/bin:${PATH}
+              # manylinux CPython is static; PyInstaller requires shared libpython.
+              # Astral CPython retains an older glibc baseline inside this 2.28 image.
+              case "${RUNNER_ARCH}" in
+                X64)
+                  PYTHON_ARCH=x86_64
+                  PYTHON_SHA256=c20e1ff8600a0241849588b36948942eaccdc80da34df69674f3784a687197de
+                  ;;
+                ARM64)
+                  PYTHON_ARCH=aarch64
+                  PYTHON_SHA256=c8dd48f5e5be632b518a79076189419cb8591559959ec137e4d30f5ce143c04d
+                  ;;
+                *) echo "Unsupported Linux architecture: ${RUNNER_ARCH}" >&2; exit 1 ;;
+              esac
+              PYTHON_ROOT=$(mktemp -d)
+              curl --fail --location --proto "=https" --tlsv1.2 \
+                "https://github.com/astral-sh/python-build-standalone/releases/download/20260924/cpython-3.13.15%2B20260924-${PYTHON_ARCH}-unknown-linux-gnu-install_only.tar.gz" \
+                --output "${PYTHON_ROOT}/python.tar.gz"
+              echo "${PYTHON_SHA256}  ${PYTHON_ROOT}/python.tar.gz" | sha256sum --check --strict
+              tar --extract --gzip --file "${PYTHON_ROOT}/python.tar.gz" --directory "${PYTHON_ROOT}"
+              export PATH=${PYTHON_ROOT}/python/bin:${PATH}
               python --version
+              python -c "import pathlib, sys, sysconfig; assert sysconfig.get_config_var(\"Py_ENABLE_SHARED\") == 1; assert (pathlib.Path(sys.base_prefix) / \"lib\" / sysconfig.get_config_var(\"LDLIBRARY\")).is_file()"
               ldd --version 2>&1 | sed -n 1p
               python -m pip install --upgrade pip
               python -m pip install -e ".[dev]"
@@ -138,6 +158,7 @@ jobs:
                 --workpath build/pyinstaller --specpath build/pyinstaller \
                 --collect-all mcp --collect-data bibverify src/bibverify/__main__.py
               python tools/package_standalone.py
+              dist-standalone/bibverify benchmark --dataset benchmarks/cases.json
             '
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
