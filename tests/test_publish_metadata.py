@@ -1,5 +1,9 @@
 import json
 import re
+import shlex
+import subprocess
+import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -115,8 +119,62 @@ class PublishMetadataTests(unittest.TestCase):
 
         self.assertIn("quay.io/pypa/manylinux_2_28_x86_64@sha256:", workflow)
         self.assertIn("quay.io/pypa/manylinux_2_28_aarch64@sha256:", workflow)
-        self.assertIn("/opt/python/cp313-cp313/bin", workflow)
+        self.assertNotIn("export PATH=/opt/python/cp313-cp313/bin", workflow)
         self.assertIn("Build and test Linux executable against glibc 2.28", workflow)
+
+    def test_linux_standalones_verify_shared_python_before_building(self):
+        workflow = (ROOT / ".github" / "workflows" / "publish-standalone.yml").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn("astral-sh/python-build-standalone/releases/download/20260924/", workflow)
+        self.assertIn("cpython-3.13.15%2B20260924-${PYTHON_ARCH}", workflow)
+        self.assertIn("PYTHON_ARCH=x86_64", workflow)
+        self.assertIn("PYTHON_ARCH=aarch64", workflow)
+        hashes = re.findall(r"PYTHON_SHA256=([0-9a-f]{64})", workflow)
+        self.assertEqual(len(hashes), 2)
+        self.assertEqual(len(set(hashes)), 2)
+        self.assertIn("sha256sum --check --strict", workflow)
+        self.assertLess(
+            workflow.index("sha256sum --check --strict"), workflow.index("tar --extract")
+        )
+        self.assertIn("Py_ENABLE_SHARED", workflow)
+        self.assertIn("LDLIBRARY", workflow)
+        self.assertIn("Unsupported Linux architecture:", workflow)
+        self.assertIn(
+            "dist-standalone/bibverify benchmark --dataset benchmarks/cases.json", workflow
+        )
+
+    def test_shared_python_guard_handles_relocated_and_invalid_runtimes(self):
+        workflow = (ROOT / ".github" / "workflows" / "publish-standalone.yml").read_text(
+            encoding="utf-8"
+        )
+        check_line = next(
+            line.strip() for line in workflow.splitlines() if "Py_ENABLE_SHARED" in line
+        )
+        command = shlex.split(check_line)[2]
+        with tempfile.TemporaryDirectory() as directory:
+            library = Path(directory) / "lib" / "libpython3.13.so"
+            library.parent.mkdir()
+            library.touch()
+            for shared, exists, expected in ((1, True, 0), (0, True, 1), (1, False, 1)):
+                with self.subTest(shared=shared, exists=exists):
+                    if not exists:
+                        library.unlink()
+                    values = {
+                        "Py_ENABLE_SHARED": shared,
+                        "LDLIBRARY": library.name,
+                        # Standalone CPython retains this non-relocatable build-time value.
+                        "LIBDIR": "/install/lib",
+                    }
+                    setup = (
+                        f"import sys, sysconfig; sys.base_prefix = {directory!r}; "
+                        f"sysconfig.get_config_var = {values!r}.get; "
+                    )
+                    result = subprocess.run(
+                        [sys.executable, "-c", setup + command], capture_output=True, check=False
+                    )
+                    self.assertEqual(result.returncode, expected, result.stderr)
 
 
 if __name__ == "__main__":
