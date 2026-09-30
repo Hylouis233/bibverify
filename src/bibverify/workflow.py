@@ -298,6 +298,10 @@ class WorkflowMixin:
 
     def _merged_database(self) -> BibDatabase:
         database = BibDatabase()
+        if self.db is not None:
+            database.preambles = list(self.db.preambles)
+            database.comments = list(self.db.comments)
+            database.strings = self.db.strings.copy()
         replacements = {
             item["key"]: item["updated"]
             for item in self.results["updated"]

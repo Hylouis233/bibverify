@@ -23,9 +23,27 @@ class BibTeXMixin:
 
         if not value:
             return ""
-        value = re.sub(r"\{+", "{", value)
-        value = re.sub(r"\}+", "}", value)
-        value = value.strip("{}")
+        # Remove only balanced groups enclosing the entire value. Collapsing
+        # arbitrary braces corrupts nested TeX commands and case-protected words.
+        while value.startswith("{") and value.endswith("}"):
+            depth = 0
+            escaped = False
+            for _index, character in enumerate(value):
+                if escaped:
+                    escaped = False
+                    continue
+                if character == "\\":
+                    escaped = True
+                    continue
+                if character == "{":
+                    depth += 1
+                elif character == "}":
+                    depth -= 1
+                if depth == 0:
+                    break
+            if depth != 0 or _index != len(value) - 1:
+                break
+            value = value[1:-1]
 
         if protect_case:
             return "{" + value + "}"

@@ -136,3 +136,15 @@ def test_doi_identifier_conflict_uses_review_required_exit_code():
 
     assert result.exit_code == 3
     assert "conflict" in result.stderr
+
+
+def test_doi_invalid_configuration_is_a_reported_input_error(tmp_path):
+    config = tmp_path / "invalid.json"
+    config.write_text("{broken json", encoding="utf-8")
+
+    result = runner.invoke(app, ["doi", "10.1000/example", "--config", str(config), "--json"])
+
+    assert result.exit_code == 5
+    assert "Error:" in result.stderr
+    assert result.stdout == ""
+    assert "Traceback" not in result.stderr
