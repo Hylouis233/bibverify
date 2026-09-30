@@ -1,3 +1,4 @@
+import tomllib
 from pathlib import Path
 
 import yaml
@@ -48,3 +49,17 @@ def test_dependabot_groups_codeql_version_and_security_updates():
         "applies-to": "security-updates",
         "patterns": ["github/codeql-action/*"],
     }
+
+
+def test_bibtexparser_requirement_preserves_the_supported_v1_api():
+    metadata = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    requirement = next(
+        value for value in metadata["project"]["dependencies"] if value.startswith("bibtexparser")
+    )
+    compatibility_requirements = (
+        (ROOT / "requirements.txt").read_text(encoding="utf-8").splitlines()
+    )
+
+    # Remove this guard only with a tested migration of checker.py and bibtex.py to v2.
+    assert "<2" in requirement.removeprefix("bibtexparser").split(",")
+    assert requirement in compatibility_requirements

@@ -23,7 +23,8 @@ classifiers = [
   "Topic :: Scientific/Engineering :: Information Analysis",
 ]
 dependencies = [
-  "bibtexparser>=1.4.4,<3",
+  # The checker uses the v1 BibTexParser API; v2 requires a separate migration.
+  "bibtexparser>=1.4.4,<2",
   "mcp>=2.0,<3",
   "requests>=2.34.2,<3",
   "rich>=13.9,<16",
