@@ -4,6 +4,11 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    # Remove this exception with the tested bibtexparser v2 API migration.
+    # Keep minor, patch, and security updates enabled.
+    ignore:
+      - dependency-name: bibtexparser
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: github-actions
     directory: /
     schedule:
