@@ -170,9 +170,13 @@ def doi(
     ] = False,
 ) -> None:
     """Resolve one DOI to a BibTeX entry."""
-    with redirect_stdout(StringIO()):
-        checker = BibTeXChecker(config)
-        bibtex, lookup = checker.bibtex_from_doi_result(value, key=key)
+    try:
+        with redirect_stdout(StringIO()):
+            checker = BibTeXChecker(config)
+            bibtex, lookup = checker.bibtex_from_doi_result(value, key=key)
+    except (OSError, ValueError) as exc:
+        error_console.print(f"Error: {exc}")
+        raise typer.Exit(code=5) from exc
     if not bibtex:
         error_console.print(checker.doi_lookup_failure_message(value, lookup))
         if lookup.status is QueryStatus.INVALID_INPUT:
