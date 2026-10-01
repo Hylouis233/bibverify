@@ -24,7 +24,7 @@ classifiers = [
 ]
 dependencies = [
   # The checker uses the v1 BibTexParser API; v2 requires a separate migration.
-  "bibtexparser>=1.4.4,<2",
+  "bibtexparser>=1.4.4,<3",
   "mcp>=2.0,<3",
   "requests>=2.34.2,<3",
   "rich>=13.9,<16",
