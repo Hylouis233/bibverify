@@ -63,3 +63,23 @@ def test_bibtexparser_requirement_preserves_the_supported_v1_api():
     # Remove this guard only with a tested migration of checker.py and bibtex.py to v2.
     assert "<2" in requirement.removeprefix("bibtexparser").split(",")
     assert requirement in compatibility_requirements
+
+
+def test_dependabot_defers_only_bibtexparser_major_version_updates():
+    config = yaml.safe_load((ROOT / ".github/dependabot.yml").read_text(encoding="utf-8"))
+    pip = next(
+        update
+        for update in config["updates"]
+        if update["package-ecosystem"] == "pip" and update["directory"] == "/"
+    )
+
+    # A version range or dependency-only ignore would also suppress security updates.
+    # Remove this exception with the tested v2 API migration, alongside the <2 guard.
+    assert pip["ignore"] == [
+        {
+            "dependency-name": "bibtexparser",
+            "update-types": ["version-update:semver-major"],
+        }
+    ]
+    assert "allow" not in pip
+    assert pip.get("open-pull-requests-limit", 5) > 0
