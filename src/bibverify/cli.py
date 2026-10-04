@@ -9,7 +9,6 @@ from io import StringIO
 from pathlib import Path
 from typing import Annotated, Literal, cast
 
-import click
 import typer
 from rich.console import Console
 
@@ -137,7 +136,7 @@ def check(
         raise typer.Exit(code=5) from exc
 
     if json_output:
-        typer.echo(json.dumps(summary, ensure_ascii=False, indent=2))
+        typer.echo(json.dumps(summary, ensure_ascii=True, indent=2))
 
     counts = summary["counts"]
     if counts.get("invalid_input", 0):
@@ -190,7 +189,7 @@ def doi(
         typer.echo(
             json.dumps(
                 {"doi": checker.canonicalize_doi(value), "bibtex": bibtex.strip()},
-                ensure_ascii=False,
+                ensure_ascii=True,
             )
         )
     else:
@@ -222,7 +221,7 @@ def doctor_command(
     """Check installation, configuration, and local runtime readiness."""
     checks = doctor(config_file=str(config))
     if json_output:
-        typer.echo(json.dumps(checks, ensure_ascii=False, indent=2))
+        typer.echo(json.dumps(checks, ensure_ascii=True, indent=2))
     else:
         console.print(format_doctor_report(checks))
     if any(not item["ok"] and item.get("required", False) for item in checks):
@@ -263,7 +262,7 @@ def benchmark_command(
 ) -> None:
     """Run the deterministic offline matching benchmark."""
     result = run_benchmark(dataset)
-    typer.echo(json.dumps(result, ensure_ascii=False, indent=2))
+    typer.echo(json.dumps(result, ensure_ascii=True, indent=2))
     if result["wrong_auto_match_rate"] > 0:
         raise typer.Exit(code=1)
 
@@ -368,12 +367,11 @@ def main(argv: list[str] | None = None) -> int:
     """Run the CLI and return a process exit code."""
     args = _translate_legacy_args(list(sys.argv[1:] if argv is None else argv))
     try:
-        app(args=args, standalone_mode=False)
-    except typer.Exit as exc:
-        return int(exc.exit_code)
-    except click.ClickException as exc:
-        exc.show(file=sys.stderr)
-        return int(exc.exit_code)
+        # Let Typer handle usage errors and command exits with its own exception
+        # types, then preserve the resulting code for every process entry point.
+        app(args=args)
+    except SystemExit as exc:
+        return int(exc.code or 0)
     return 0
 
 
