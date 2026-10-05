@@ -7,7 +7,7 @@ from difflib import SequenceMatcher
 from typing import Any
 
 from bibverify._author_names import (
-    _authors,
+    author_lists_overlap,
     expand_abbreviated_page_range,
     normalize_pages,
     normalize_person_list,
@@ -105,7 +105,7 @@ def assess_match(
     weighted: list[tuple[float, float]] = []
     if original.get("title") and candidate.get("title"):
         weighted.append((title, 0.55))
-    author_score = _overlap(_authors(original.get("author")), _authors(candidate.get("author")))
+    author_score = author_lists_overlap(original.get("author"), candidate.get("author"))
     if author_score is not None:
         weighted.append((author_score, 0.20))
     original_year = _year(original.get("year"))
