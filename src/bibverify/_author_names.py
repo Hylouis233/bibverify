@@ -1,2 +1,1 @@
-# probe
-x: list[str] = []
+LOAD_FROM_/tmp/emit_author_args.json
