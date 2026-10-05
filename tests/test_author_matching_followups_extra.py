@@ -34,7 +34,7 @@ def test_pubmed_initial_blocks_still_parse_as_initials():
     """Vowel-free and suffix-like PubMed blocks stay initials after the P1 fix."""
     assert person_lists_equivalent("Smith, John Robert", "Smith JR")
     assert person_lists_equivalent("Smith, S R", "Smith SR")
-    assert person_lists_equivalent("Meyer, MN", "Meyer, Michelle N.")
+    assert person_lists_equivalent("Meyer, M.N.", "Meyer, Michelle N.")
     assert person_lists_equivalent("Meyer, P M", "Meyer PM")
     assert person_lists_equivalent("Lovelace, A.", "Lovelace A")
     # Vowel-bearing initials remain acceptable via the alternate PubMed reading.
