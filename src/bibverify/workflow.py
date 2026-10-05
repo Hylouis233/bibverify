@@ -98,9 +98,7 @@ class WorkflowMixin:
                 auto_update_threshold=threshold,
             )
             decisions = [decision.to_dict() for decision in merged.decisions]
-            meaningful = [
-                decision for decision in decisions if is_substantive_mismatch(decision)
-            ]
+            meaningful = [decision for decision in decisions if is_substantive_mismatch(decision)]
             if meaningful:
                 common.update(
                     status=EntryStatus.METADATA_MISMATCH.value,
