@@ -237,7 +237,7 @@ class WorkflowMixin:
 
     def _output_prefix(self) -> str:
         prefix = re.sub(r'[<>:"/\\|?*\x00-\x1f]+', "_", Path(self.bib_file).stem)
-        prefix = re.sub(r"\s+", "_", prefix).strip(" ._-" )[:100]
+        prefix = re.sub(r"\s+", "_", prefix).strip(" ._-")[:100]
         if prefix.upper() in {
             "CON",
             "PRN",
