@@ -26,6 +26,57 @@ def normalize_text(value: Any) -> str:
     return re.sub(r"\s+", " ", text).strip()
 
 
+def expand_abbreviated_page_range(text: str) -> str:
+    """Expand BibTeX-style abbreviated end pages (``683--97`` → ``683-697``)."""
+    normalized = re.sub(r"[-\u2013\u2014]+", "-", text.strip())
+    match = re.fullmatch(r"(\d+)-(\d+)", normalized)
+    if not match:
+        return normalized
+    start, end = match.group(1), match.group(2)
+    if 0 < len(end) < len(start):
+        expanded = start[: -len(end)] + end
+        if int(expanded) >= int(start):
+            end = expanded
+    return f"{start}-{end}"
+
+
+def normalize_pages(value: Any) -> str:
+    # Expand abbreviated end pages before normalize_text strips hyphens.
+    dashed = re.sub(r"[-\u2013\u2014]+", "-", str(value or "").strip())
+    return normalize_text(expand_abbreviated_page_range(dashed))
+
+
+def _collapse_initials(tokens: list[str]) -> list[str]:
+    """Join adjacent single-letter tokens so ``P M`` matches ``PM``."""
+    collapsed: list[str] = []
+    buffer: list[str] = []
+    for token in tokens:
+        if len(token) == 1:
+            buffer.append(token)
+            continue
+        if buffer:
+            collapsed.append("".join(buffer))
+            buffer = []
+        collapsed.append(token)
+    if buffer:
+        collapsed.append("".join(buffer))
+    return collapsed
+
+
+def normalize_person_list(value: Any) -> str:
+    """Normalize author/editor lists for equivalence checks."""
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    names = re.split(r"\s+and\s+|\s*;\s*", text, flags=re.IGNORECASE)
+    normalized_names: list[str] = []
+    for name in names:
+        tokens = _collapse_initials(normalize_text(name).split())
+        if tokens:
+            normalized_names.append(" ".join(tokens))
+    return " and ".join(normalized_names)
+
+
 def title_similarity(left: Any, right: Any) -> float:
     first = normalize_text(left)
     second = normalize_text(right)
@@ -138,7 +189,9 @@ def assess_match(
         weighted.append((venue_score, 0.10))
     page_score: float | None = None
     if original.get("pages") and candidate.get("pages"):
-        page_score = float(normalize_text(original["pages"]) == normalize_text(candidate["pages"]))
+        page_score = float(
+            normalize_pages(original["pages"]) == normalize_pages(candidate["pages"])
+        )
         weighted.append((page_score, 0.05))
 
     if shared_ids:
