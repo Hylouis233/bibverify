@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import re
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 # Bound by apply() from the matching module to avoid circular imports at load time.
 normalize_text: Callable[[Any], str]
