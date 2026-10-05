@@ -15,7 +15,7 @@ from typing import Any
 
 from bibtexparser.bibdatabase import BibDatabase
 
-from bibverify.merge import merge_entries
+from bibverify.merge import is_substantive_mismatch, merge_entries
 from bibverify.models import EntryStatus
 
 RESULT_BUCKETS = (
@@ -99,9 +99,7 @@ class WorkflowMixin:
             )
             decisions = [decision.to_dict() for decision in merged.decisions]
             meaningful = [
-                decision
-                for decision in decisions
-                if not decision["normalized_equal"] and decision["action"] != "keep_original"
+                decision for decision in decisions if is_substantive_mismatch(decision)
             ]
             if meaningful:
                 common.update(
@@ -241,7 +239,7 @@ class WorkflowMixin:
 
     def _output_prefix(self) -> str:
         prefix = re.sub(r'[<>:"/\\|?*\x00-\x1f]+', "_", Path(self.bib_file).stem)
-        prefix = re.sub(r"\s+", "_", prefix).strip(" ._-")[:100]
+        prefix = re.sub(r"\s+", "_", prefix).strip(" ._-" )[:100]
         if prefix.upper() in {
             "CON",
             "PRN",
