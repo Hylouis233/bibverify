@@ -133,3 +133,103 @@ def test_normalized_doi_is_kept_verbatim():
     decision = next(item for item in result.decisions if item.field == "doi")
     assert decision.normalized_equal is True
     assert decision.action == "keep_original"
+
+
+def test_abbreviated_page_ranges_are_equivalent():
+    result = merge_entries(
+        {"ID": "demo", "ENTRYTYPE": "article", "pages": "683--97"},
+        {"ID": "demo", "ENTRYTYPE": "article", "pages": "683--697"},
+        source="crossref",
+        confidence=1.0,
+    )
+
+    decision = next(item for item in result.decisions if item.field == "pages")
+    assert decision.normalized_equal is True
+    assert decision.action == "keep_original"
+
+
+def test_non_abbreviated_page_mismatch_stays_distinct():
+    result = merge_entries(
+        {"ID": "demo", "ENTRYTYPE": "article", "pages": "683--999"},
+        {"ID": "demo", "ENTRYTYPE": "article", "pages": "683--697"},
+        source="crossref",
+        confidence=1.0,
+    )
+
+    decision = next(item for item in result.decisions if item.field == "pages")
+    assert decision.normalized_equal is False
+    assert decision.action == "update"
+    assert result.substantive
+
+
+def test_author_initial_formatting_variants_are_equivalent():
+    result = merge_entries(
+        {
+            "ID": "demo",
+            "ENTRYTYPE": "article",
+            "author": "Van der Vleuten, Cees P. M.",
+        },
+        {
+            "ID": "demo",
+            "ENTRYTYPE": "article",
+            "author": "Van Der Vleuten, Cees PM",
+        },
+        source="crossref",
+        confidence=1.0,
+    )
+
+    decision = next(item for item in result.decisions if item.field == "author")
+    assert decision.normalized_equal is True
+    assert decision.action == "keep_original"
+
+
+def test_candidate_only_publisher_is_enrichment_not_substantive():
+    from bibverify.merge import is_substantive_mismatch
+
+    result = merge_entries(
+        {
+            "ID": "demo",
+            "ENTRYTYPE": "article",
+            "title": "Example",
+            "journal": "Medical Education",
+        },
+        {
+            "ID": "demo",
+            "ENTRYTYPE": "article",
+            "title": "Example",
+            "journal": "Medical Education",
+            "publisher": "Wiley",
+        },
+        source="crossref",
+        confidence=0.99,
+    )
+
+    publisher = next(item for item in result.decisions if item.field == "publisher")
+    assert publisher.action == "add"
+    assert is_substantive_mismatch(publisher) is False
+    assert result.substantive == []
+
+
+def test_authority_omitted_fields_are_marked_unchecked():
+    result = merge_entries(
+        {
+            "ID": "demo",
+            "ENTRYTYPE": "article",
+            "title": "Example",
+            "number": "8",
+            "pages": "10--20",
+        },
+        {
+            "ID": "demo",
+            "ENTRYTYPE": "article",
+            "title": "Example",
+        },
+        source="crossref",
+        confidence=0.99,
+    )
+
+    by_field = {item.field: item for item in result.decisions}
+    assert by_field["number"].action == "unchecked"
+    assert by_field["pages"].action == "unchecked"
+    assert "未核对" in by_field["number"].reason
+    assert result.substantive == []
