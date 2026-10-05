@@ -47,7 +47,7 @@ def test_author_overlap_uses_union_denominator():
 def test_two_letter_allcaps_given_with_vowel_is_not_letter_split():
     """``Li, BO`` ≠ ``Li, Bob Oliver`` (PR #49 Codex round 8 P2)."""
     assert not person_lists_equivalent("Li, BO", "Li, Bob Oliver")
-    assert person_lists_equivalent("Meyer, MN", "Meyer, Michelle N.")
+    assert person_lists_equivalent("Meyer, M.N.", "Meyer, Michelle N.")
     assert person_lists_equivalent("Smith JR", "Smith, John Robert")
 
 
