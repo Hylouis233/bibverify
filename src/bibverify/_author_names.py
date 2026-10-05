@@ -73,7 +73,9 @@ def _raw_token_looks_like_initials(token: str) -> bool:
     Generational spellings such as ``JR`` are valid PubMed given-initials in
     family-first position and must not be rejected by a suffix blacklist.
     Mixed-case short surnames such as ``Li`` / ``Kim`` stay surnames.
-    Non-Latin single letters need a trailing period (``И.``); undotted CJK never.
+    Undotted all-caps words longer than two letters (``ADA``) stay full given names,
+    not letter-split initials. Non-Latin single letters need a trailing period
+    (``И.``); undotted CJK never.
     """
     stripped = token.replace(".", "")
     if not stripped.isalpha() or _is_cjk_ideograph_token(stripped):
@@ -81,7 +83,13 @@ def _raw_token_looks_like_initials(token: str) -> bool:
     if len(stripped) == 1:
         return stripped.isascii() or ("." in token)
     if 2 <= len(stripped) <= 4 and stripped.isascii():
-        return stripped.isupper() or ("." in token)
+        if "." in token:
+            return True
+        folded = stripped.casefold()
+        if folded in _PUBMED_INITIAL_BLOCKS:
+            return True
+        # Undotted all-caps: only two-letter packs are compact initials (``MN``/``AM``).
+        return len(stripped) == 2 and stripped.isupper()
     return False
 
 
@@ -113,14 +121,15 @@ def _collapse_initials(tokens: list[str]) -> list[str]:
 
 
 def _strip_trailing_generational(tokens: list[str]) -> list[str]:
-    """Drop a trailing generational/degree suffix only when a real name token remains.
+    """Drop a trailing generational/degree suffix only in true suffix position.
 
-    A sole given token (``Smith, V`` / ``Md Rahman``) is the given name itself, and a
-    ``v`` right after another single-letter initial (``J V``) is an initial, not Roman V.
+    A sole given token (``Smith, V`` / ``Md Rahman``) is the given name itself.
+    Single-letter ``v`` is never stripped: in ``John V Smith`` / ``Smith, J V`` it is a
+    middle initial, not Roman numeral V (author lists almost never use bare V as Jr/Sr).
     """
     if len(tokens) < 2 or tokens[-1] not in _GENERATIONAL_SUFFIXES:
         return tokens
-    if tokens[-1] == "v" and _is_initial_letter(tokens[-2]):
+    if tokens[-1] == "v":
         return tokens
     return tokens[:-1]
 
@@ -171,13 +180,18 @@ def _looks_like_western_given(raw_token: str) -> bool:
     )
 
 
+def _looks_like_leading_given_or_initial(raw_token: str) -> bool:
+    """Leading evidence for ``Given… FAMILY`` / ``A. B. NG`` before an all-caps surname."""
+    return _looks_like_western_given(raw_token) or _raw_token_looks_like_initials(raw_token)
+
+
 def _is_allcaps_short_surname(raw_tokens: list[str]) -> bool:
-    """``Ada LI`` / ``Ada NG``: trailing all-caps block reads as a surname, not initials.
+    """``Ada LI`` / ``A. B. NG``: trailing all-caps block reads as a surname, not initials.
 
     Requires an undotted ASCII 2-4 letter all-caps trailing token that is not a known
     PubMed suffix/initial block (``JR``/``SR``/``MD``...), after leading tokens that
-    all look like Western given names. Vowel-free surnames such as ``NG`` count; single
-    or dotted initials still stay PubMed initials via the normal initials path.
+    look like Western given names and/or initials. Vowel-free surnames such as ``NG``
+    count; leading dotted initials (``A. B.``) also support the surname reading.
     """
     if len(raw_tokens) < 2:
         return False
@@ -188,7 +202,7 @@ def _is_allcaps_short_surname(raw_tokens: list[str]) -> bool:
         return False
     if trailing.casefold() in _PUBMED_INITIAL_BLOCKS:
         return False
-    return all(_looks_like_western_given(token) for token in raw_tokens[:-1])
+    return all(_looks_like_leading_given_or_initial(token) for token in raw_tokens[:-1])
 
 
 def _pubmed_family_first_parse(raw_tokens: list[str]) -> tuple[str, list[str]] | None:
@@ -279,10 +293,19 @@ def _align_given_tokens(left: list[str], right: list[str]) -> bool:
 
 def _persons_equivalent(left: str, right: str) -> bool:
     """Compare one author pair; comma structure is checked per author, not per list."""
-    if ("," in left) == ("," in right) and _person_name_collapsed(left) == _person_name_collapsed(
+    left_has_comma = "," in left
+    right_has_comma = "," in right
+    if left_has_comma == right_has_comma and _person_name_collapsed(left) == _person_name_collapsed(
         right
     ):
-        return True
+        if not left_has_comma:
+            return True
+        # Both have commas: collapsed text alone can hide different family/given cuts
+        # (``Smith A, B`` vs ``Smith, A B`` both collapse to ``smith ab``).
+        left_family = normalize_text(left.split(",", 1)[0])
+        right_family = normalize_text(right.split(",", 1)[0])
+        if left_family == right_family:
+            return True
     return any(
         left_family == right_family and _given_tokens_equivalent(left_given, right_given)
         for left_family, left_given in _parse_person_name_candidates(left)
@@ -324,33 +347,24 @@ def _authors(value: Any) -> set[str]:
     return normalized
 
 
-def _author_candidate_families(name: str) -> set[str]:
-    return {family for family, _given in _parse_person_name_candidates(name) if family}
-
-
 def author_lists_overlap(left: Any, right: Any) -> float | None:
-    """Author agreement for scoring, honoring alternate PubMed/Western parses.
+    """Author agreement for scoring via full person compatibility (order-independent).
 
-    When both sides have the same author count, each paired name contributes a hit
-    if any candidate family on the left intersects any on the right. That way
-    ``Lovelace AM`` still fully agrees with ``Lovelace, Ada Mary`` even though the
-    preferred parse of the compact form may put ``am`` first.
+    A hit requires ``_persons_equivalent`` (family + given across alternate parses), not
+    bare family-set intersection — so ``Ada, Bob`` does not score against ``Ada LI``.
+    Matching is greedy and order-independent, so reordered equal-length lists still
+    agree when the same people are present.
     """
     left_names = _split_author_list(left)
     right_names = _split_author_list(right)
     if not left_names or not right_names:
         return None
-    left_sets = [_author_candidate_families(name) for name in left_names]
-    right_sets = [_author_candidate_families(name) for name in right_names]
-    if len(left_sets) == len(right_sets):
-        hits = sum(
-            1
-            for left_set, right_set in zip(left_sets, right_sets, strict=True)
-            if left_set & right_set
-        )
-        return hits / len(left_sets)
-    left_flat = set().union(*left_sets) if left_sets else set()
-    right_flat = set().union(*right_sets) if right_sets else set()
-    if not left_flat or not right_flat:
-        return None
-    return len(left_flat & right_flat) / len(left_flat | right_flat)
+    remaining = list(range(len(right_names)))
+    hits = 0
+    for left_name in left_names:
+        for index, right_index in enumerate(remaining):
+            if _persons_equivalent(left_name, right_names[right_index]):
+                hits += 1
+                remaining.pop(index)
+                break
+    return hits / max(len(left_names), len(right_names))
