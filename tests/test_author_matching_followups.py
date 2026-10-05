@@ -181,3 +181,36 @@ def test_given_token_alignment_is_iterative_for_long_lists():
     left = f"Family, {many}"
     right = f"Family, {many} Extra"
     assert not person_lists_equivalent(left, right)
+
+
+def test_pubmed_jr_initials_are_not_blocked_as_suffix():
+    """PubMed ``Smith JR`` ≡ ``Smith, John Robert`` (PR #49 Codex round 3 P1)."""
+    assert person_lists_equivalent("Smith JR", "Smith, John Robert")
+    result = assess_match(
+        {
+            "title": "A Study of Something Interesting Enough",
+            "author": "Smith, John Robert",
+            "year": "2020",
+        },
+        {
+            "title": "A Study of Something Interesting Enough",
+            "author": "Smith JR",
+            "year": "2020",
+        },
+    )
+    assert result.signals["authors"] == 1.0
+    assert result.status == QueryStatus.MATCHED
+
+
+def test_mixed_list_comma_checked_per_author():
+    """List-level comma must not hide a per-author family swap (PR #49 Codex round 3 P2)."""
+    assert not person_lists_equivalent(
+        "Smith, John and Benjamin, Franklin",
+        "Smith, John and Benjamin Franklin",
+    )
+
+
+def test_dotted_cyrillic_initial_matches_expanded_given_name():
+    """``Иванов, И.`` ≡ ``Иванов, Иван``; undotted CJK still not initials (PR #49 Codex round 3 P2)."""
+    assert person_lists_equivalent("Иванов, И.", "Иванов, Иван")
+    assert not person_lists_equivalent("王, 伟", "王, 伟明")
