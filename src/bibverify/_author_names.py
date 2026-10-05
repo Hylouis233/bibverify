@@ -8,10 +8,6 @@ import unicodedata
 from typing import Any
 
 _GENERATIONAL_SUFFIXES = frozenset({"jr", "sr", "ii", "iii", "iv", "v", "md", "phd", "esq"})
-# Undotted all-caps trailing blocks that stay PubMed given-initials even though
-# they could be read as a short surname (``Smith JR`` / ``Smith SR`` / ``Doe MD``).
-_PUBMED_INITIAL_BLOCKS = frozenset({"jr", "sr", "md", "phd", "ii", "iii", "iv", "esq"})
-_LATIN_VOWELS = frozenset("aeiou")
 
 
 def normalize_text(value: Any) -> str:
@@ -74,6 +70,9 @@ def _raw_token_looks_like_initials(token: str) -> bool:
     Generational spellings such as ``JR`` are valid PubMed given-initials in
     family-first position and must not be rejected by a suffix blacklist.
     Mixed-case short surnames such as ``Li`` / ``Kim`` stay surnames.
+    Undotted all-caps tokens that contain a Latin vowel (``LI``, ``WU``, ``KIM``,
+    ``LEE``) are treated as short surnames, not compact initials; vowel-free
+    packs such as ``MN`` / ``JR`` / ``PM`` remain initials.
     Non-Latin single letters need a trailing period (``И.``); undotted CJK never.
     """
     stripped = token.replace(".", "")
@@ -82,7 +81,12 @@ def _raw_token_looks_like_initials(token: str) -> bool:
     if len(stripped) == 1:
         return stripped.isascii() or ("." in token)
     if 2 <= len(stripped) <= 4 and stripped.isascii():
-        return stripped.isupper() or ("." in token)
+        if "." in token:
+            return True
+        if not stripped.isupper():
+            return False
+        # Vowel-containing all-caps tokens are usually short surnames (LI/WU/KIM/LEE).
+        return not any(char in "AEIOU" for char in stripped)
     return False
 
 
@@ -114,16 +118,10 @@ def _collapse_initials(tokens: list[str]) -> list[str]:
 
 
 def _strip_trailing_generational(tokens: list[str]) -> list[str]:
-    """Drop a trailing generational/degree suffix only when a real name token remains.
-
-    A sole given token (``Smith, V`` / ``Md Rahman``) is the given name itself, and a
-    ``v`` right after another single-letter initial (``J V``) is an initial, not Roman V.
-    """
-    if len(tokens) < 2 or tokens[-1] not in _GENERATIONAL_SUFFIXES:
-        return tokens
-    if tokens[-1] == "v" and _is_initial_letter(tokens[-2]):
-        return tokens
-    return tokens[:-1]
+    # Only strip when another name token remains (keep sole ``V`` / ``Md``).
+    if len(tokens) >= 2 and tokens[-1] in _GENERATIONAL_SUFFIXES:
+        return tokens[:-1]
+    return tokens
 
 
 def _split_given_tokens_from_raw(raw_given: str) -> list[str]:
@@ -159,67 +157,23 @@ def normalize_person_list(value: Any) -> str:
 
 def _parse_person_name(name: str) -> tuple[str, list[str]]:
     """Split a person into ``(family, given_tokens)`` without collapsing initials."""
-    return _parse_person_name_candidates(name)[0]
-
-
-def _looks_like_western_given(raw_token: str) -> bool:
-    """Mixed-case, undotted, multi-letter token such as ``Ada`` (not ``ADA`` / ``A.``)."""
-    return (
-        len(raw_token) >= 2
-        and raw_token.isalpha()
-        and not raw_token.isupper()
-        and not _raw_token_looks_like_initials(raw_token)
-    )
-
-
-def _is_allcaps_short_surname(raw_tokens: list[str]) -> bool:
-    """``Ada LI`` / ``Min KIM``: trailing all-caps block reads as a surname, not initials.
-
-    Requires an undotted ASCII 2-4 letter all-caps trailing token containing a Latin
-    vowel, not a known PubMed suffix block (``JR``/``SR``/``MD``...), after leading
-    tokens that all look like Western given names. Vowel-free packs (``MN``/``PM``)
-    and single or dotted initials always stay PubMed initials.
-    """
-    if len(raw_tokens) < 2:
-        return False
-    trailing = raw_tokens[-1]
-    if not (
-        2 <= len(trailing) <= 4 and trailing.isascii() and trailing.isalpha() and trailing.isupper()
-    ):
-        return False
-    folded = trailing.casefold()
-    if folded in _PUBMED_INITIAL_BLOCKS or not (_LATIN_VOWELS & set(folded)):
-        return False
-    return all(_looks_like_western_given(token) for token in raw_tokens[:-1])
-
-
-def _parse_person_name_candidates(name: str) -> list[tuple[str, list[str]]]:
-    """Plausible ``(family, given_tokens)`` parses, most likely first.
-
-    ``Ada LI`` is ambiguous between Western ``Given FAMILY`` and PubMed ``Family II``;
-    both readings are returned so equivalence accepts either (``Lovelace AM`` still
-    matches ``Lovelace, Ada M.``), while the preferred reading drives family overlap.
-    """
     raw = str(name or "").strip()
     if not raw:
-        return [("", [])]
+        return "", []
     if "," in raw:
         family, given = raw.split(",", 1)
-        return [(normalize_text(family), _split_given_tokens_from_raw(given))]
+        return normalize_text(family), _split_given_tokens_from_raw(given)
     raw_tokens = re.split(r"\s+", raw)
     tokens = normalize_text(raw).split()
     if not tokens:
-        return [("", [])]
-    western = (tokens[-1], _strip_trailing_generational(tokens[:-1]))
+        return "", []
     # PubMed-style ``Family I`` / ``Family MN`` / ``Family JR`` (no comma).
     if len(raw_tokens) >= 2 and _raw_token_looks_like_initials(raw_tokens[-1]):
-        stripped = raw_tokens[-1].replace(".", "")
-        pubmed = (" ".join(tokens[:-1]), list(stripped.casefold()))
-        if _is_allcaps_short_surname(raw_tokens):
-            return [western, pubmed]
-        return [pubmed]
+        trailing = raw_tokens[-1]
+        stripped = trailing.replace(".", "")
+        return " ".join(tokens[:-1]), list(stripped.casefold())
     # Western ``Given Family``
-    return [western]
+    return tokens[-1], _strip_trailing_generational(tokens[:-1])
 
 
 def _given_tokens_equivalent(left: list[str], right: list[str]) -> bool:
@@ -261,11 +215,11 @@ def _persons_equivalent(left: str, right: str) -> bool:
         right
     ):
         return True
-    return any(
-        left_family == right_family and _given_tokens_equivalent(left_given, right_given)
-        for left_family, left_given in _parse_person_name_candidates(left)
-        for right_family, right_given in _parse_person_name_candidates(right)
-    )
+    left_family, left_given = _parse_person_name(left)
+    right_family, right_given = _parse_person_name(right)
+    if left_family != right_family:
+        return False
+    return _given_tokens_equivalent(left_given, right_given)
 
 
 def person_lists_equivalent(left: Any, right: Any) -> bool:
