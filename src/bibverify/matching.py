@@ -8,6 +8,7 @@ import unicodedata
 from difflib import SequenceMatcher
 from typing import Any
 
+from bibverify._author_match_patch import apply as _apply_author_match_patch
 from bibverify.identifiers import extract_identifiers
 from bibverify.models import MatchAssessment, QueryStatus
 
@@ -47,8 +48,6 @@ def normalize_pages(value: Any) -> str:
 
 
 # Person-name matching (Codex follow-ups on #48): PubMed forms, compact initials, CJK.
-from bibverify._author_match_patch import apply as _apply_author_match_patch
-
 _apply_author_match_patch(globals())
 
 
