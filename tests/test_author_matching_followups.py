@@ -380,3 +380,69 @@ def test_middle_initial_v_is_not_stripped_as_roman_numeral():
 def test_collapsed_shortcut_preserves_comma_family_boundary():
     """``Smith A, B`` ≠ ``Smith, A B`` (PR #49 Codex P2)."""
     assert not person_lists_equivalent("Smith A, B", "Smith, A B")
+
+
+def test_author_overlap_uses_maximum_bipartite_matching():
+    """Ambiguous ``Ada LI`` must not make overlap depend on author order (PR #49 Codex P1)."""
+    left = "Ada LI and Ada, Laura Irene"
+    right_a = "Ada, Laura Irene and Li, Ada"
+    right_b = "Li, Ada and Ada, Laura Irene"
+    from bibverify._author_names import author_lists_overlap
+
+    assert author_lists_overlap(left, right_a) == 1.0
+    assert author_lists_overlap(left, right_b) == 1.0
+    result_a = assess_match(
+        {
+            "title": "Notes on the Analytical Engine",
+            "author": left,
+            "year": "1843",
+        },
+        {
+            "title": "Notes on the Analytical Engine",
+            "author": right_a,
+            "year": "1843",
+        },
+    )
+    result_b = assess_match(
+        {
+            "title": "Notes on the Analytical Engine",
+            "author": left,
+            "year": "1843",
+        },
+        {
+            "title": "Notes on the Analytical Engine",
+            "author": right_b,
+            "year": "1843",
+        },
+    )
+    assert result_a.signals["authors"] == 1.0
+    assert result_b.signals["authors"] == 1.0
+
+
+def test_allcaps_full_given_supports_given_family_parse():
+    """``LI, ADA`` ≡ ``ADA LI`` / ``Ada LI`` (PR #49 Codex P1)."""
+    assert person_lists_equivalent("LI, ADA", "ADA LI")
+    assert person_lists_equivalent("LI, ADA", "Ada LI")
+    assert person_lists_equivalent("ADA LI", "Ada LI")
+    result = assess_match(
+        {
+            "title": "Notes on the Analytical Engine",
+            "author": "LI, ADA",
+            "year": "1843",
+        },
+        {
+            "title": "Notes on the Analytical Engine",
+            "author": "ADA LI",
+            "year": "1843",
+        },
+    )
+    assert result.signals["authors"] == 1.0
+    assert result.status == QueryStatus.MATCHED
+
+
+def test_conflicting_generational_suffixes_are_not_equivalent():
+    """``Jr`` vs ``Sr`` / ``II`` vs ``III`` stay distinct; bare may omit (PR #49 Codex P2)."""
+    assert not person_lists_equivalent("Smith, John Jr", "Smith, John Sr")
+    assert not person_lists_equivalent("Smith, John II", "Smith, John III")
+    assert person_lists_equivalent("Smith, John Jr", "Smith, John")
+    assert person_lists_equivalent("Smith, Victor Jr", "Smith, Victor")
