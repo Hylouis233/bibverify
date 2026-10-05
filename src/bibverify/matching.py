@@ -77,6 +77,70 @@ def normalize_person_list(value: Any) -> str:
     return " and ".join(normalized_names)
 
 
+def _parse_person_name(name: str) -> tuple[str, list[str]]:
+    """Split a person into ``(family, given_tokens)`` without collapsing initials."""
+    raw = str(name or "").strip()
+    if not raw:
+        return "", []
+    if "," in raw:
+        family, given = raw.split(",", 1)
+        family_key = normalize_text(family)
+        given_tokens = normalize_text(given).split()
+        return family_key, given_tokens
+    tokens = normalize_text(raw).split()
+    if not tokens:
+        return "", []
+    return tokens[-1], tokens[:-1]
+
+
+def _given_tokens_equivalent(left: list[str], right: list[str]) -> bool:
+    """Allow initials to match expanded given names; keep full-name disagreements."""
+    if _collapse_initials(left) == _collapse_initials(right):
+        return True
+    if len(left) != len(right):
+        return False
+    for first, second in zip(left, right, strict=True):
+        if first == second:
+            continue
+        if len(first) == 1 and len(second) > 1 and second.startswith(first):
+            continue
+        if len(second) == 1 and len(first) > 1 and first.startswith(second):
+            continue
+        return False
+    return True
+
+
+def person_lists_equivalent(left: Any, right: Any) -> bool:
+    """True when two author/editor lists name the same people under light variants.
+
+    Accepts initials vs expanded given names (``M. N.`` ≡ ``Michelle N.``,
+    ``W`` ≡ ``William``) and the existing punctuation/case/collapse variants,
+    but still treats distinct expanded given names as different.
+    """
+    left_names = [
+        part
+        for part in re.split(r"\s+and\s+|\s*;\s*", str(left or "").strip(), flags=re.IGNORECASE)
+        if part.strip()
+    ]
+    right_names = [
+        part
+        for part in re.split(r"\s+and\s+|\s*;\s*", str(right or "").strip(), flags=re.IGNORECASE)
+        if part.strip()
+    ]
+    if len(left_names) != len(right_names):
+        return False
+    if not left_names and not right_names:
+        return True
+    for left_name, right_name in zip(left_names, right_names, strict=True):
+        left_family, left_given = _parse_person_name(left_name)
+        right_family, right_given = _parse_person_name(right_name)
+        if left_family != right_family:
+            return False
+        if not _given_tokens_equivalent(left_given, right_given):
+            return False
+    return True
+
+
 def title_similarity(left: Any, right: Any) -> float:
     first = normalize_text(left)
     second = normalize_text(right)
