@@ -6,8 +6,6 @@ import re
 from difflib import SequenceMatcher
 from typing import Any
 
-from bibverify.identifiers import extract_identifiers
-from bibverify.models import MatchAssessment, QueryStatus
 from bibverify._author_names import (
     _authors,
     normalize_pages,
@@ -15,6 +13,17 @@ from bibverify._author_names import (
     normalize_text,
     person_lists_equivalent,
 )
+from bibverify.identifiers import extract_identifiers
+from bibverify.models import MatchAssessment, QueryStatus
+
+__all__ = [
+    "assess_match",
+    "normalize_pages",
+    "normalize_person_list",
+    "normalize_text",
+    "person_lists_equivalent",
+    "title_similarity",
+]
 
 
 def title_similarity(left: Any, right: Any) -> float:
