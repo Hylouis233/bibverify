@@ -8,6 +8,7 @@ from typing import Any
 
 from bibverify._author_names import (
     _authors,
+    expand_abbreviated_page_range,
     normalize_pages,
     normalize_person_list,
     normalize_text,
@@ -18,6 +19,7 @@ from bibverify.models import MatchAssessment, QueryStatus
 
 __all__ = [
     "assess_match",
+    "expand_abbreviated_page_range",
     "normalize_pages",
     "normalize_person_list",
     "normalize_text",
