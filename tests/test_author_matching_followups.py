@@ -221,17 +221,23 @@ def test_dotted_cyrillic_initial_matches_expanded_given_name():
 
 
 def test_allcaps_short_surname_after_given_name_is_family():
-    """``Li, Ada`` ≡ ``Ada LI``: all-caps short surnames are not initials (PR #49 Codex P1)."""
+    """``Li, Ada`` ≡ ``Ada LI`` / ``Ng, Ada`` ≡ ``Ada NG`` (PR #49 Codex P1)."""
     assert person_lists_equivalent("Li, Ada", "Ada LI")
     assert person_lists_equivalent("Wu, Ada", "Ada WU")
     assert person_lists_equivalent("Kim, Min", "Min KIM")
     assert person_lists_equivalent("Lee, Jane", "Jane LEE")
+    assert person_lists_equivalent("Ng, Ada", "Ada NG")
     assert not person_lists_equivalent("Ada LI", "Bob LI")
     result = assess_match(
         {"title": "Notes on the Analytical Engine", "author": "Li, Ada", "year": "1843"},
         {"title": "Notes on the Analytical Engine", "author": "Ada LI", "year": "1843"},
     )
     assert result.signals["authors"] == 1.0
+    ng = assess_match(
+        {"title": "Notes on the Analytical Engine", "author": "Ng, Ada", "year": "1843"},
+        {"title": "Notes on the Analytical Engine", "author": "Ada NG", "year": "1843"},
+    )
+    assert ng.signals["authors"] == 1.0
 
 
 def test_pubmed_initial_blocks_still_parse_as_initials():
@@ -258,3 +264,42 @@ def test_sole_given_token_is_not_stripped_as_suffix():
 def test_page_range_helper_is_reexported_from_matching():
     """``expand_abbreviated_page_range`` stays importable from ``bibverify.matching``."""
     assert expand_abbreviated_page_range("683--97") == "683-697"
+
+
+def test_scoring_uses_alternate_pubmed_family_parse():
+    """``Lovelace AM`` must score against ``Lovelace, Ada Mary`` (PR #49 Codex P1)."""
+    assert person_lists_equivalent("Lovelace, Ada Mary", "Lovelace AM")
+    result = assess_match(
+        {
+            "title": "Notes on the Analytical Engine",
+            "author": "Lovelace, Ada Mary",
+            "year": "1843",
+        },
+        {
+            "title": "Notes on the Analytical Engine",
+            "author": "Lovelace AM",
+            "year": "1843",
+        },
+    )
+    assert result.signals["authors"] == 1.0
+    assert result.status == QueryStatus.MATCHED
+
+
+def test_pubmed_dotted_and_spaced_initial_runs_keep_family():
+    """``Smith M.N.`` / ``Smith M. N.`` ≡ ``Smith, Mary Nancy`` (PR #49 Codex P1)."""
+    assert person_lists_equivalent("Smith M.N.", "Smith, Mary Nancy")
+    assert person_lists_equivalent("Smith M. N.", "Smith, Mary Nancy")
+    result = assess_match(
+        {
+            "title": "A Study of Something Interesting Enough",
+            "author": "Smith, Mary Nancy",
+            "year": "2020",
+        },
+        {
+            "title": "A Study of Something Interesting Enough",
+            "author": "Smith M.N.",
+            "year": "2020",
+        },
+    )
+    assert result.signals["authors"] == 1.0
+    assert result.status == QueryStatus.MATCHED
