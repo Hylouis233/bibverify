@@ -303,3 +303,80 @@ def test_pubmed_dotted_and_spaced_initial_runs_keep_family():
     )
     assert result.signals["authors"] == 1.0
     assert result.status == QueryStatus.MATCHED
+
+
+def test_scoring_requires_full_person_compatibility():
+    """Family-only alternate overlap must not score ``Ada, Bob`` vs ``Ada LI`` (PR #49 Codex P1)."""
+    assert not person_lists_equivalent("Ada, Bob", "Ada LI")
+    result = assess_match(
+        {
+            "title": "Notes on the Analytical Engine",
+            "author": "Ada, Bob",
+            "year": "1843",
+        },
+        {
+            "title": "Notes on the Analytical Engine",
+            "author": "Ada LI",
+            "year": "1843",
+        },
+    )
+    assert result.signals["authors"] == 0.0
+    assert result.status != QueryStatus.MATCHED
+
+
+def test_leading_initials_support_allcaps_surname():
+    """``Ng, A. B.`` ≡ ``A. B. NG`` (PR #49 Codex P1)."""
+    assert person_lists_equivalent("Ng, A. B.", "A. B. NG")
+    result = assess_match(
+        {
+            "title": "Notes on the Analytical Engine",
+            "author": "Ng, A. B.",
+            "year": "1843",
+        },
+        {
+            "title": "Notes on the Analytical Engine",
+            "author": "A. B. NG",
+            "year": "1843",
+        },
+    )
+    assert result.signals["authors"] == 1.0
+    assert result.status == QueryStatus.MATCHED
+
+
+def test_undotted_allcaps_given_name_is_not_letter_split():
+    """``Li, ADA`` ≠ ``Li, Alice Diana Anne`` (PR #49 Codex P2)."""
+    assert not person_lists_equivalent("Li, ADA", "Li, Alice Diana Anne")
+
+
+def test_author_overlap_is_order_independent():
+    """Reordered equal-length author lists still fully agree (PR #49 Codex P2)."""
+    left = "Smith, Alice and Jones, Bob"
+    right = "Jones, Bob and Smith, Alice"
+    assert person_lists_equivalent(
+        "Smith, Alice",
+        "Smith, Alice",
+    )
+    result = assess_match(
+        {
+            "title": "A Study of Something Interesting Enough",
+            "author": left,
+            "year": "2020",
+        },
+        {
+            "title": "A Study of Something Interesting Enough",
+            "author": right,
+            "year": "2020",
+        },
+    )
+    assert result.signals["authors"] == 1.0
+
+
+def test_middle_initial_v_is_not_stripped_as_roman_numeral():
+    """``John V Smith`` ≠ ``John Smith`` (PR #49 Codex P2)."""
+    assert not person_lists_equivalent("John V Smith", "John Smith")
+    assert person_lists_equivalent("Smith, John V", "John V Smith")
+
+
+def test_collapsed_shortcut_preserves_comma_family_boundary():
+    """``Smith A, B`` ≠ ``Smith, A B`` (PR #49 Codex P2)."""
+    assert not person_lists_equivalent("Smith A, B", "Smith, A B")
