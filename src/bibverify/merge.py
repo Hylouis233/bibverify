@@ -12,7 +12,12 @@ from bibverify.identifiers import (
     canonicalize_pmcid,
     canonicalize_pmid,
 )
-from bibverify.matching import normalize_pages, normalize_person_list, normalize_text
+from bibverify.matching import (
+    normalize_pages,
+    normalize_person_list,
+    normalize_text,
+    person_lists_equivalent,
+)
 from bibverify.models import FieldChange
 
 IDENTIFIER_FIELDS = {"doi", "pmid", "pmcid", "eprint"}
@@ -127,9 +132,12 @@ def merge_entries(
         original_value = original.get(field, "")
         original_text = str(original_value or "").strip()
         suggested_text = str(suggested_value).strip()
-        normalized_equal = normalize_field(field, original_text) == normalize_field(
-            field, suggested_text
-        )
+        if field.lower() in {"author", "editor"}:
+            normalized_equal = person_lists_equivalent(original_text, suggested_text)
+        else:
+            normalized_equal = normalize_field(field, original_text) == normalize_field(
+                field, suggested_text
+            )
         if normalized_equal and original_text:
             action = "keep_original"
             reason = "Values are equivalent after field-specific normalization."

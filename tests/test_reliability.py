@@ -183,6 +183,72 @@ def test_author_initial_formatting_variants_are_equivalent():
     assert decision.action == "keep_original"
 
 
+def test_author_initials_match_expanded_given_names():
+    """``M. N.`` ≡ ``Michelle N.``; ``W`` ≡ ``William`` (issue #45 follow-up)."""
+    meyer = merge_entries(
+        {
+            "ID": "meyer",
+            "ENTRYTYPE": "article",
+            "title": "Practical Tips for Ethical Data Sharing",
+            "author": "Meyer, M. N.",
+        },
+        {
+            "ID": "meyer",
+            "ENTRYTYPE": "article",
+            "title": "Practical Tips for Ethical Data Sharing",
+            "author": "Meyer, Michelle N.",
+        },
+        source="crossref",
+        confidence=0.95,
+    )
+    decision = next(item for item in meyer.decisions if item.field == "author")
+    assert decision.normalized_equal
+    assert decision.action == "keep_original"
+    assert meyer.substantive == []
+
+    wrigley = merge_entries(
+        {
+            "ID": "wrigley",
+            "ENTRYTYPE": "article",
+            "title": "Demo",
+            "author": "Wrigley, W",
+        },
+        {
+            "ID": "wrigley",
+            "ENTRYTYPE": "article",
+            "title": "Demo",
+            "author": "Wrigley, William",
+        },
+        source="crossref",
+        confidence=0.95,
+    )
+    decision = next(item for item in wrigley.decisions if item.field == "author")
+    assert decision.normalized_equal
+    assert wrigley.substantive == []
+
+
+def test_distinct_expanded_given_names_remain_substantive():
+    result = merge_entries(
+        {
+            "ID": "meyer",
+            "ENTRYTYPE": "article",
+            "title": "Demo",
+            "author": "Meyer, Michelle N.",
+        },
+        {
+            "ID": "meyer",
+            "ENTRYTYPE": "article",
+            "title": "Demo",
+            "author": "Meyer, Michael N.",
+        },
+        source="crossref",
+        confidence=0.95,
+    )
+    decision = next(item for item in result.decisions if item.field == "author")
+    assert not decision.normalized_equal
+    assert any(item.field == "author" for item in result.substantive)
+
+
 def test_candidate_only_publisher_is_enrichment_not_substantive():
     from bibverify.merge import is_substantive_mismatch
 
