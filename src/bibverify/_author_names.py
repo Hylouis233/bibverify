@@ -389,8 +389,11 @@ def _authors(value: Any) -> set[str]:
 def _maximum_person_matches(left_names: list[str], right_names: list[str]) -> int:
     """Maximum bipartite matching under ``_persons_equivalent`` (order-independent)."""
     adjacency = [
-        [right_index for right_index, right_name in enumerate(right_names)
-         if _persons_equivalent(left_name, right_name)]
+        [
+            right_index
+            for right_index, right_name in enumerate(right_names)
+            if _persons_equivalent(left_name, right_name)
+        ]
         for left_name in left_names
     ]
     match_to_left = [-1] * len(right_names)
