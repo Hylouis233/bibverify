@@ -189,7 +189,9 @@ def assess_match(
         weighted.append((venue_score, 0.10))
     page_score: float | None = None
     if original.get("pages") and candidate.get("pages"):
-        page_score = float(normalize_pages(original["pages"]) == normalize_pages(candidate["pages"]))
+        page_score = float(
+            normalize_pages(original["pages"]) == normalize_pages(candidate["pages"])
+        )
         weighted.append((page_score, 0.05))
 
     if shared_ids:
