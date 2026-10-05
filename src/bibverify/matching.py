@@ -9,8 +9,23 @@ from difflib import SequenceMatcher
 from typing import Any
 
 from bibverify._author_match_patch import apply as _apply_author_match_patch
+from bibverify._author_match_patch import (
+    normalize_person_list,
+    person_lists_equivalent,
+)
 from bibverify.identifiers import extract_identifiers
 from bibverify.models import MatchAssessment, QueryStatus
+
+# Re-export for callers / type checkers (also rebound by apply() below).
+__all__ = [
+    "assess_match",
+    "expand_abbreviated_page_range",
+    "normalize_pages",
+    "normalize_person_list",
+    "normalize_text",
+    "person_lists_equivalent",
+    "title_similarity",
+]
 
 
 def normalize_text(value: Any) -> str:
