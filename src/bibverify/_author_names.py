@@ -11,7 +11,6 @@ _GENERATIONAL_SUFFIXES = frozenset({"jr", "sr", "ii", "iii", "iv", "v", "md", "p
 # Undotted all-caps trailing blocks that stay PubMed given-initials even though
 # they could be read as a short surname (``Smith JR`` / ``Smith SR`` / ``Doe MD``).
 _PUBMED_INITIAL_BLOCKS = frozenset({"jr", "sr", "md", "phd", "ii", "iii", "iv", "esq"})
-_LATIN_VOWELS = frozenset("aeiou")
 
 
 def normalize_text(value: Any) -> str:
@@ -173,12 +172,12 @@ def _looks_like_western_given(raw_token: str) -> bool:
 
 
 def _is_allcaps_short_surname(raw_tokens: list[str]) -> bool:
-    """``Ada LI`` / ``Min KIM``: trailing all-caps block reads as a surname, not initials.
+    """``Ada LI`` / ``Ada NG``: trailing all-caps block reads as a surname, not initials.
 
-    Requires an undotted ASCII 2-4 letter all-caps trailing token containing a Latin
-    vowel, not a known PubMed suffix block (``JR``/``SR``/``MD``...), after leading
-    tokens that all look like Western given names. Vowel-free packs (``MN``/``PM``)
-    and single or dotted initials always stay PubMed initials.
+    Requires an undotted ASCII 2-4 letter all-caps trailing token that is not a known
+    PubMed suffix/initial block (``JR``/``SR``/``MD``...), after leading tokens that
+    all look like Western given names. Vowel-free surnames such as ``NG`` count; single
+    or dotted initials still stay PubMed initials via the normal initials path.
     """
     if len(raw_tokens) < 2:
         return False
@@ -187,10 +186,33 @@ def _is_allcaps_short_surname(raw_tokens: list[str]) -> bool:
         2 <= len(trailing) <= 4 and trailing.isascii() and trailing.isalpha() and trailing.isupper()
     ):
         return False
-    folded = trailing.casefold()
-    if folded in _PUBMED_INITIAL_BLOCKS or not (_LATIN_VOWELS & set(folded)):
+    if trailing.casefold() in _PUBMED_INITIAL_BLOCKS:
         return False
     return all(_looks_like_western_given(token) for token in raw_tokens[:-1])
+
+
+def _pubmed_family_first_parse(raw_tokens: list[str]) -> tuple[str, list[str]] | None:
+    """Family from raw tokens before the full trailing initials run.
+
+    ``Smith M.N.`` / ``Smith M. N.`` must yield family ``smith`` and given ``m``+``n``,
+    not family ``smith m`` from normalized ``tokens[:-1]``.
+    """
+    if len(raw_tokens) < 2:
+        return None
+    index = len(raw_tokens)
+    while index > 1 and _raw_token_looks_like_initials(raw_tokens[index - 1]):
+        index -= 1
+    if index >= len(raw_tokens):
+        return None
+    family = normalize_text(" ".join(raw_tokens[:index]))
+    given: list[str] = []
+    for token in raw_tokens[index:]:
+        stripped = token.replace(".", "")
+        if stripped:
+            given.extend(list(stripped.casefold()))
+    if not family or not given:
+        return None
+    return family, given
 
 
 def _parse_person_name_candidates(name: str) -> list[tuple[str, list[str]]]:
@@ -211,13 +233,13 @@ def _parse_person_name_candidates(name: str) -> list[tuple[str, list[str]]]:
     if not tokens:
         return [("", [])]
     western = (tokens[-1], _strip_trailing_generational(tokens[:-1]))
-    # PubMed-style ``Family I`` / ``Family MN`` / ``Family JR`` (no comma).
+    # PubMed-style ``Family I`` / ``Family MN`` / ``Family M.N.`` / ``Family M. N.``.
     if len(raw_tokens) >= 2 and _raw_token_looks_like_initials(raw_tokens[-1]):
-        stripped = raw_tokens[-1].replace(".", "")
-        pubmed = (" ".join(tokens[:-1]), list(stripped.casefold()))
-        if _is_allcaps_short_surname(raw_tokens):
-            return [western, pubmed]
-        return [pubmed]
+        pubmed = _pubmed_family_first_parse(raw_tokens)
+        if pubmed is not None:
+            if _is_allcaps_short_surname(raw_tokens):
+                return [western, pubmed]
+            return [pubmed]
     # Western ``Given Family``
     return [western]
 
@@ -289,6 +311,7 @@ def person_lists_equivalent(left: Any, right: Any) -> bool:
 
 
 def _authors(value: Any) -> set[str]:
+    """Preferred family tokens only (first candidate parse per author)."""
     text = html.unescape(str(value or ""))
     if not text.strip():
         return set()
@@ -299,3 +322,35 @@ def _authors(value: Any) -> set[str]:
         if family:
             normalized.add(family)
     return normalized
+
+
+def _author_candidate_families(name: str) -> set[str]:
+    return {family for family, _given in _parse_person_name_candidates(name) if family}
+
+
+def author_lists_overlap(left: Any, right: Any) -> float | None:
+    """Author agreement for scoring, honoring alternate PubMed/Western parses.
+
+    When both sides have the same author count, each paired name contributes a hit
+    if any candidate family on the left intersects any on the right. That way
+    ``Lovelace AM`` still fully agrees with ``Lovelace, Ada Mary`` even though the
+    preferred parse of the compact form may put ``am`` first.
+    """
+    left_names = _split_author_list(left)
+    right_names = _split_author_list(right)
+    if not left_names or not right_names:
+        return None
+    left_sets = [_author_candidate_families(name) for name in left_names]
+    right_sets = [_author_candidate_families(name) for name in right_names]
+    if len(left_sets) == len(right_sets):
+        hits = sum(
+            1
+            for left_set, right_set in zip(left_sets, right_sets, strict=True)
+            if left_set & right_set
+        )
+        return hits / len(left_sets)
+    left_flat = set().union(*left_sets) if left_sets else set()
+    right_flat = set().union(*right_sets) if right_sets else set()
+    if not left_flat or not right_flat:
+        return None
+    return len(left_flat & right_flat) / len(left_flat | right_flat)
