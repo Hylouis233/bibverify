@@ -2,143 +2,30 @@
 
 from __future__ import annotations
 
-import html
 import re
-import unicodedata
 from difflib import SequenceMatcher
 from typing import Any
 
+from bibverify._author_names import (
+    author_lists_overlap,
+    expand_abbreviated_page_range,
+    normalize_pages,
+    normalize_person_list,
+    normalize_text,
+    person_lists_equivalent,
+)
 from bibverify.identifiers import extract_identifiers
 from bibverify.models import MatchAssessment, QueryStatus
 
-
-def normalize_text(value: Any) -> str:
-    text = html.unescape(str(value or ""))
-    text = re.sub(r"\\[a-zA-Z]+\s*\{([^{}]*)\}", r"\1", text)
-    text = re.sub(r"[{}]", "", text)
-    text = unicodedata.normalize("NFKC", text).casefold()
-    text = (
-        text.replace("\N{GREEK SMALL LETTER BETA}", " beta ")
-        .replace("\N{GREEK SMALL LETTER ALPHA}", " alpha ")
-        .replace("\N{GREEK SMALL LETTER GAMMA}", " gamma ")
-    )
-    text = re.sub(r"[^\w\s]", " ", text, flags=re.UNICODE)
-    return re.sub(r"\s+", " ", text).strip()
-
-
-def expand_abbreviated_page_range(text: str) -> str:
-    """Expand BibTeX-style abbreviated end pages (``683--97`` → ``683-697``)."""
-    normalized = re.sub(r"[-\u2013\u2014]+", "-", text.strip())
-    match = re.fullmatch(r"(\d+)-(\d+)", normalized)
-    if not match:
-        return normalized
-    start, end = match.group(1), match.group(2)
-    if 0 < len(end) < len(start):
-        expanded = start[: -len(end)] + end
-        if int(expanded) >= int(start):
-            end = expanded
-    return f"{start}-{end}"
-
-
-def normalize_pages(value: Any) -> str:
-    # Expand abbreviated end pages before normalize_text strips hyphens.
-    dashed = re.sub(r"[-\u2013\u2014]+", "-", str(value or "").strip())
-    return normalize_text(expand_abbreviated_page_range(dashed))
-
-
-def _collapse_initials(tokens: list[str]) -> list[str]:
-    """Join adjacent single-letter tokens so ``P M`` matches ``PM``."""
-    collapsed: list[str] = []
-    buffer: list[str] = []
-    for token in tokens:
-        if len(token) == 1:
-            buffer.append(token)
-            continue
-        if buffer:
-            collapsed.append("".join(buffer))
-            buffer = []
-        collapsed.append(token)
-    if buffer:
-        collapsed.append("".join(buffer))
-    return collapsed
-
-
-def normalize_person_list(value: Any) -> str:
-    """Normalize author/editor lists for equivalence checks."""
-    text = str(value or "").strip()
-    if not text:
-        return ""
-    names = re.split(r"\s+and\s+|\s*;\s*", text, flags=re.IGNORECASE)
-    normalized_names: list[str] = []
-    for name in names:
-        tokens = _collapse_initials(normalize_text(name).split())
-        if tokens:
-            normalized_names.append(" ".join(tokens))
-    return " and ".join(normalized_names)
-
-
-def _parse_person_name(name: str) -> tuple[str, list[str]]:
-    """Split a person into ``(family, given_tokens)`` without collapsing initials."""
-    raw = str(name or "").strip()
-    if not raw:
-        return "", []
-    if "," in raw:
-        family, given = raw.split(",", 1)
-        family_key = normalize_text(family)
-        given_tokens = normalize_text(given).split()
-        return family_key, given_tokens
-    tokens = normalize_text(raw).split()
-    if not tokens:
-        return "", []
-    return tokens[-1], tokens[:-1]
-
-
-def _given_tokens_equivalent(left: list[str], right: list[str]) -> bool:
-    """Allow initials to match expanded given names; keep full-name disagreements."""
-    if _collapse_initials(left) == _collapse_initials(right):
-        return True
-    if len(left) != len(right):
-        return False
-    for first, second in zip(left, right, strict=True):
-        if first == second:
-            continue
-        if len(first) == 1 and len(second) > 1 and second.startswith(first):
-            continue
-        if len(second) == 1 and len(first) > 1 and first.startswith(second):
-            continue
-        return False
-    return True
-
-
-def person_lists_equivalent(left: Any, right: Any) -> bool:
-    """True when two author/editor lists name the same people under light variants.
-
-    Accepts initials vs expanded given names (``M. N.`` ≡ ``Michelle N.``,
-    ``W`` ≡ ``William``) and the existing punctuation/case/collapse variants,
-    but still treats distinct expanded given names as different.
-    """
-    left_names = [
-        part
-        for part in re.split(r"\s+and\s+|\s*;\s*", str(left or "").strip(), flags=re.IGNORECASE)
-        if part.strip()
-    ]
-    right_names = [
-        part
-        for part in re.split(r"\s+and\s+|\s*;\s*", str(right or "").strip(), flags=re.IGNORECASE)
-        if part.strip()
-    ]
-    if len(left_names) != len(right_names):
-        return False
-    if not left_names and not right_names:
-        return True
-    for left_name, right_name in zip(left_names, right_names, strict=True):
-        left_family, left_given = _parse_person_name(left_name)
-        right_family, right_given = _parse_person_name(right_name)
-        if left_family != right_family:
-            return False
-        if not _given_tokens_equivalent(left_given, right_given):
-            return False
-    return True
+__all__ = [
+    "assess_match",
+    "expand_abbreviated_page_range",
+    "normalize_pages",
+    "normalize_person_list",
+    "normalize_text",
+    "person_lists_equivalent",
+    "title_similarity",
+]
 
 
 def title_similarity(left: Any, right: Any) -> float:
@@ -158,23 +45,6 @@ def title_similarity(left: Any, right: Any) -> float:
     if shorter in longer and len(shorter.split()) >= 4 and len(shorter) / len(longer) >= 0.65:
         containment = len(shorter) / len(longer)
     return max(sequence, jaccard, containment)
-
-
-def _authors(value: Any) -> set[str]:
-    text = html.unescape(str(value or ""))
-    if not text.strip():
-        return set()
-    names = re.split(r"\s+and\s+|\s*;\s*", text, flags=re.IGNORECASE)
-    normalized = set()
-    for name in names:
-        # BibTeX commonly represents authors as ``Family, Given`` while many
-        # APIs return ``Given Family``. Compare family-name tokens in either
-        # representation without changing the serialized author field.
-        family = name.split(",", 1)[0] if "," in name else name.split()[-1]
-        family = normalize_text(family)
-        if family:
-            normalized.add(family)
-    return normalized
 
 
 def _overlap(left: set[str], right: set[str]) -> float | None:
@@ -235,7 +105,7 @@ def assess_match(
     weighted: list[tuple[float, float]] = []
     if original.get("title") and candidate.get("title"):
         weighted.append((title, 0.55))
-    author_score = _overlap(_authors(original.get("author")), _authors(candidate.get("author")))
+    author_score = author_lists_overlap(original.get("author"), candidate.get("author"))
     if author_score is not None:
         weighted.append((author_score, 0.20))
     original_year = _year(original.get("year"))
