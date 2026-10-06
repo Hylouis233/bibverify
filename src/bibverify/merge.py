@@ -42,6 +42,15 @@ CHECKABLE_FIELDS = CONSERVATIVE_FIELDS - {"ENTRYTYPE"}
 NON_SUBSTANTIVE_ACTIONS = frozenset({"keep_original", "unchecked", "add"})
 
 
+# Leading English articles in journal/booktitle names (Crossref vs publisher style).
+_LEADING_VENUE_ARTICLE = re.compile(r"^(?:the|an|a)\s+")
+
+
+def strip_leading_venue_article(value: str) -> str:
+    """Drop a leading The/A/An after normalization; middle articles stay intact."""
+    return _LEADING_VENUE_ARTICLE.sub("", value).strip()
+
+
 def normalize_field(field: str, value: Any) -> str:
     text = str(value or "").strip()
     lowered = field.lower()
@@ -59,7 +68,10 @@ def normalize_field(field: str, value: Any) -> str:
         return normalize_person_list(text)
     if lowered in {"year", "volume", "number"}:
         return re.sub(r"\D", "", text)
-    return normalize_text(text)
+    normalized = normalize_text(text)
+    if lowered in {"journal", "booktitle"}:
+        return strip_leading_venue_article(normalized)
+    return normalized
 
 
 def is_substantive_mismatch(decision: FieldChange | dict[str, Any]) -> bool:
