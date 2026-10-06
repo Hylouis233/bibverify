@@ -4,7 +4,49 @@ from __future__ import annotations
 
 from typing import Any
 
+from bibverify.merge import merge_entries
 from bibverify.models import Candidate, EntryStatus, ProviderResult, QueryOutcome, QueryStatus
+
+
+def _substantive_mismatch_count(
+    original: dict[str, Any],
+    candidate: Candidate,
+    *,
+    auto_update_threshold: float = 0.92,
+) -> int:
+    """How many hard-gate field mismatches a candidate would produce against ``original``."""
+    merged = merge_entries(
+        original,
+        candidate.entry,
+        source=candidate.provider,
+        confidence=candidate.confidence,
+        auto_update_threshold=auto_update_threshold,
+    )
+    return len(merged.substantive)
+
+
+def _prefer_reconciled_candidate(
+    original: dict[str, Any],
+    candidates: list[Candidate],
+    *,
+    auto_update_threshold: float = 0.92,
+) -> Candidate:
+    """Prefer the matched candidate with fewest substantive mismatches, then confidence.
+
+    When Crossref-first stop-on-first would otherwise hard-fail on a malformed
+    author serialization, another provider that supports the same work identity
+    can reconcile the citation without changing ``stop_on_first_match`` defaults
+    for clean first hits.
+    """
+    return min(
+        candidates,
+        key=lambda candidate: (
+            _substantive_mismatch_count(
+                original, candidate, auto_update_threshold=auto_update_threshold
+            ),
+            -candidate.confidence,
+        ),
+    )
 
 
 class ProviderQueriesMixin:
@@ -63,7 +105,21 @@ class ProviderQueriesMixin:
                 print(f"    {self.lang.get_text('found_match', platform=platform.upper())}")
                 matched.extend(result.candidates)
                 if stop_on_first:
-                    break
+                    # Only stop early when the hit would not hard-fail the gate.
+                    # Otherwise keep querying so a later provider can reconcile
+                    # malformed authority fields (e.g. Crossref author order).
+                    threshold = float(
+                        self.config.get("query_settings", {}).get("auto_update_threshold", 0.92)
+                    )
+                    best = result.best
+                    if (
+                        best is not None
+                        and _substantive_mismatch_count(
+                            original, best, auto_update_threshold=threshold
+                        )
+                        == 0
+                    ):
+                        break
             elif result.status is QueryStatus.AMBIGUOUS:
                 print(f"    [{platform.upper()}] ambiguous candidate")
                 ambiguous.extend(result.candidates)
@@ -74,11 +130,14 @@ class ProviderQueriesMixin:
 
         incomplete = any(result.status.is_unavailable for result in provider_results)
         if matched:
-            matched.sort(key=lambda candidate: candidate.confidence, reverse=True)
+            threshold = float(
+                self.config.get("query_settings", {}).get("auto_update_threshold", 0.92)
+            )
+            best = _prefer_reconciled_candidate(original, matched, auto_update_threshold=threshold)
             return QueryOutcome(
                 EntryStatus.VERIFIED,
                 provider_results,
-                matched[0],
+                best,
                 complete=not incomplete,
                 reason="At least one provider returned a high-confidence candidate.",
             )
