@@ -47,21 +47,31 @@ jobs:
           tar --extract --gzip --file mcp-publisher.tar.gz mcp-publisher
           ./mcp-publisher --help >/dev/null
 
-      - name: Authenticate to MCP Registry
-        run: ./mcp-publisher login github-oidc
-
-      - name: Publish server metadata
+      - name: Publish server metadata with fresh authentication
+        timeout-minutes: 35
+        shell: bash
         run: |
+          set -euo pipefail
+          publish_log=$(mktemp)
+          trap 'rm -f "$publish_log"' EXIT
           for attempt in {1..60}; do
-            if ./mcp-publisher publish; then
+            # Registry JWTs are short-lived: never reuse one after the retry delay.
+            ./mcp-publisher login github-oidc
+            if ./mcp-publisher publish >"$publish_log" 2>&1; then
+              cat "$publish_log"
               exit 0
             fi
+            cat "$publish_log"
 
+            if ! python tools/mcp_publish_retry.py <"$publish_log"; then
+              echo "MCP Registry publication failed with a non-retryable error."
+              exit 1
+            fi
             if [ "$attempt" -eq 60 ]; then
               echo "MCP Registry publication failed after ${attempt} attempts."
               exit 1
             fi
 
-            echo "Registry dependencies may still be propagating; retrying in 30 seconds (${attempt}/60)."
+            echo "Package version is still propagating; retrying in 30 seconds (${attempt}/60)."
             sleep 30
           done
