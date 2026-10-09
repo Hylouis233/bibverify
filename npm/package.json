@@ -1,6 +1,6 @@
 {
   "name": "@hylouis233/bibverify",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Cross-platform BibTeX verification CLI and MCP server",
   "license": "MIT",
   "type": "module",
