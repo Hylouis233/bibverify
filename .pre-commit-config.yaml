@@ -1,0 +1,12 @@
+# Optional local hook: `python -m pip install pre-commit && pre-commit install`.
+# It runs the same entry point as `python tools/fix.py`, so a commit is formatted the
+# way CI's quality job expects before it is pushed.
+repos:
+  - repo: local
+    hooks:
+      - id: bibverify-fix
+        name: tools/fix.py (ruff format + import sort, then CI's ruff checks)
+        entry: python tools/fix.py
+        language: system
+        pass_filenames: false
+        types: [python]
