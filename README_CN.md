@@ -377,6 +377,10 @@ python -m bibverify benchmark --dataset benchmarks/cases.json
 python -m pip_audit . --strict
 ```
 
+推送前运行 `python tools/fix.py`：它对 CI 检查的同一组路径执行 `ruff format` 和 import 排序，
+再原样运行 CI 的 `ruff check` 与 `ruff format --check`，需要手动处理的问题会让它返回非零。
+`pre-commit install` 后，提交时会自动运行同一条命令（见 `.pre-commit-config.yaml`）。
+
 CI 会在 Windows、macOS、Linux 和 Python 3.11–3.14 上运行测试，并执行 fixture/golden 测试、lint、类型检查、覆盖率、离线 benchmark、依赖漏洞审计、包构建与 CycloneDX SBOM 生成。GitHub Actions 固定到提交 SHA；MCP Publisher 固定版本并校验 SHA-256。PyPI 发布使用 Trusted Publishing 与默认的数字证明，不在仓库中保存上传令牌。
 
 `benchmarks/cases.json` 是用于防止匹配策略回归的最小离线标注集，覆盖短标题误匹配、DOI 冲突、预印本标题变体、Unicode/LaTeX 和虚构作者组合。它不是完整科研评测，也不能代表真实世界的最终精确率；欢迎提交更广泛、可再分发的人工标注案例。

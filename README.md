@@ -409,6 +409,11 @@ python -m pip_audit . --strict
 docker build --tag bibverify:dev .
 ```
 
+Before pushing, run `python tools/fix.py`. It applies `ruff format` and import sorting to
+exactly the paths CI checks, then runs CI's `ruff check` and `ruff format --check` commands
+and fails on anything that needs a manual fix. `pre-commit install` runs the same command
+as a commit hook (see `.pre-commit-config.yaml`).
+
 CI tests Windows, macOS, and Linux on Python 3.11–3.14, including provider fixtures, golden write-safety tests, lint, typing, coverage, the offline benchmark, dependency auditing, Python and npm package builds, a container smoke test, and a CycloneDX SBOM. GitHub Actions are pinned to commit SHAs, while the MCP Publisher is version-pinned and SHA-256 verified. PyPI and npm use Trusted Publishing with provenance attestations, and GHCR publishes multi-architecture images with an SBOM and build provenance.
 
 `benchmarks/cases.json` is a small offline regression set covering short-title false positives, DOI conflicts, preprint title variants, Unicode/LaTeX, and fabricated author combinations. It is not a complete scientific evaluation and its scores must not be interpreted as real-world performance ceilings. Contributions of broader, redistributable, human-labeled cases are welcome.
